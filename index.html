@@ -617,22 +617,12 @@ function App() {
 
   async function loadFromSheets() {
     try {
-      function fetchCSV(gid) {
-        return new Promise((resolve, reject) => {
-          Papa.parse(CONFIG.getSheetUrl(gid), { download: true, header: true, complete: resolve, error: reject });
+      // ── 1. Products via published CSV (cached OK — product data rarely changes) ──
+      const prodRes = await new Promise((resolve, reject) => {
+        Papa.parse(CONFIG.getSheetUrl(CONFIG.GID_PRODUCTS), {
+          download: true, header: true, complete: resolve, error: reject
         });
-      }
-
-      // Load all sheets in parallel
-      const [prodRes, dealsRes, linesRes, usersRes, configRes] = await Promise.all([
-        fetchCSV(CONFIG.GID_PRODUCTS),
-        fetchCSV(CONFIG.GID_DEALS),
-        fetchCSV(CONFIG.GID_DEALLINES),
-        fetchCSV(CONFIG.GID_USERS),
-        fetchCSV(CONFIG.GID_CONFIG),
-      ]);
-
-      // Products
+      });
       if (prodRes.data && prodRes.data.length > 0) {
         const parsed = prodRes.data.map(r => ({
           sku: r['SKU'] || r['sku'] || '',
@@ -645,97 +635,53 @@ function App() {
         if (parsed.length > 0) setProducts(parsed);
       }
 
-      // Deals — merge sheet data with localStorage (local fills gaps from CSV cache delay)
-      const localDeals = loadLocal('deals') || [];
-      const localDealLines = loadLocal('dealLines') || {};
+      // ── 2. Deals, Lines, Users, Config via Apps Script (real-time, no cache) ──
+      if (CONFIG.APPS_SCRIPT_URL) {
+        const res = await fetch(CONFIG.APPS_SCRIPT_URL + '?action=getData');
+        const data = await res.json();
 
-      const sheetDeals = (dealsRes.data || []).map(r => ({
-        id: r['Deal ID'] || '',
-        agent: r['Agent Name'] || '',
-        country: r['Country/Region'] || '',
-        retailer: r['Retailer'] || '',
-        periodStart: r['Deal Period Start'] || '',
-        periodEnd: r['Deal Period End'] || '',
-        status: r['Status'] || 'Draft',
-        createdDate: r['Created Date'] || '',
-        approvedBy: r['Approved By'] || '',
-        approvalDate: r['Approval Date'] || '',
-        notes: r['Notes'] || '',
-        totalSOA: parseFloat(r['Total SOA (€)']) || 0,
-        totalCommission: parseFloat(r['Total Commission (€)']) || 0,
-        totalRevenue: parseFloat(r['Total Revenue (€)']) || 0,
-        avgMargin: parseFloat(r['Avg Margin %']) || 0,
-      })).filter(d => d.id);
-
-      // Sheet deal lines
-      const sheetDealLines = {};
-      (linesRes.data || []).forEach(r => {
-        const dealId = r['Deal ID'] || '';
-        if (!dealId) return;
-        if (!sheetDealLines[dealId]) sheetDealLines[dealId] = [];
-        sheetDealLines[dealId].push({
-          dealId,
-          sku: r['SKU'] || '',
-          productName: r['Product Name'] || '',
-          soldPrice: parseFloat(r['Sold Price (€)']) || 0,
-          quantity: parseInt(r['Quantity']) || 0,
-        });
-      });
-
-      // Merge: sheet data wins for existing IDs, local adds missing ones
-      const sheetDealIds = new Set(sheetDeals.map(d => d.id));
-      const mergedDeals = [...sheetDeals];
-      localDeals.forEach(d => {
-        if (d.id && !sheetDealIds.has(d.id)) mergedDeals.push(d);
-      });
-
-      const mergedLines = { ...localDealLines, ...sheetDealLines };
-
-      setDeals(mergedDeals);
-      setDealLines(mergedLines);
-
-      // Users — merge with demo users
-      if (usersRes.data && usersRes.data.length > 0) {
-        const parsed = usersRes.data.map(r => ({
-          username: r['Username'] || '',
-          password: r['Password'] || '',
-          role: r['Role'] || 'agent',
-          displayName: r['Display Name'] || '',
-          country: r['Country/Region'] || '',
-          active: (r['Active'] || '').toLowerCase() === 'yes',
-        })).filter(u => u.username);
-        if (parsed.length > 0) {
-          window._sheetUsers = parsed;
-        }
-      }
-
-      // Config — parse countries and retailers
-      if (configRes.data && configRes.data.length > 0) {
-        const countries = new Set();
-        const retailers = {};
-        configRes.data.forEach(r => {
-          const key = (r['Key'] || '').trim();
-          const val = (r['Value'] || '').trim();
-          if (!key || !val) return;
-          if (key === 'country') {
-            countries.add(val);
-            if (!retailers[val]) retailers[val] = [];
+        if (data.success) {
+          // Deals — merge with localStorage (local covers in-flight writes)
+          const localDeals = loadLocal('deals') || [];
+          if (data.deals) {
+            const sheetIds = new Set(data.deals.map(d => d.id));
+            const merged = [...data.deals];
+            localDeals.forEach(d => {
+              if (d.id && !sheetIds.has(d.id)) merged.push(d);
+            });
+            setDeals(merged);
           }
-          if (key.startsWith('retailer_')) {
-            const country = key.replace('retailer_', '').replace(/_/g, ' ');
-            const countryName = [...countries].find(c => c.toLowerCase() === country) || country;
-            if (!retailers[countryName]) retailers[countryName] = [];
-            retailers[countryName].push(val);
+
+          // Deal Lines
+          if (data.dealLines) {
+            const localLines = loadLocal('dealLines') || {};
+            const merged = { ...localLines, ...data.dealLines };
+            setDealLines(merged);
           }
-        });
-        if (countries.size > 0) {
-          setConfig({ countries: [...countries], retailers });
+
+          // Users
+          if (data.users && data.users.length > 0) {
+            window._sheetUsers = data.users;
+          }
+
+          // Config (countries + retailers)
+          if (data.config && data.config.countries && data.config.countries.length > 0) {
+            setConfig(data.config);
+          }
         }
       }
 
       setDataSource('sheets');
     } catch(e) {
-      console.log('Using demo data (Google Sheets not available):', e);
+      // Fallback: try localStorage
+      const localDeals = loadLocal('deals');
+      const localLines = loadLocal('dealLines');
+      if (localDeals && localDeals.length > 0) {
+        setDeals(localDeals);
+        setDealLines(localLines || {});
+        setDataSource('sheets');
+      }
+      console.log('Sheet load error, using local fallback:', e);
     }
   }
 
