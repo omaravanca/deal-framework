@@ -1,0 +1,1863 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Deal Framework — Hombli</title>
+
+<!-- React 18 -->
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<!-- Babel standalone for JSX -->
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<!-- Papa Parse for Google Sheets CSV -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<!-- SheetJS for Excel export -->
+<script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+
+<style>
+/* ── Variables ── */
+:root {
+  --bg: #f1f5f9;
+  --surface: #ffffff;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --text-secondary: #64748b;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: #dbeafe;
+  --success: #16a34a;
+  --success-light: #dcfce7;
+  --warning: #d97706;
+  --warning-light: #fef3c7;
+  --danger: #dc2626;
+  --danger-light: #fee2e2;
+  --info: #6366f1;
+  --info-light: #e0e7ff;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 12px rgba(0,0,0,0.1);
+  --radius: 8px;
+  --radius-lg: 12px;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.5;
+  min-height: 100vh;
+}
+
+/* ── Login Screen ── */
+.login-overlay {
+  position: fixed; inset: 0;
+  background: linear-gradient(135deg, #1e3a5f 0%, #2563eb 100%);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 9999;
+}
+.login-card {
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  padding: 48px 40px;
+  width: 400px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+  text-align: center;
+}
+.login-card h1 { font-size: 24px; font-weight: 700; margin-bottom: 4px; }
+.login-card p { color: var(--text-secondary); margin-bottom: 32px; font-size: 14px; }
+.login-card .logo-text { font-size: 13px; color: var(--accent); font-weight: 600; letter-spacing: 1px; margin-bottom: 16px; }
+.login-field { margin-bottom: 16px; text-align: left; }
+.login-field label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary); }
+.login-field input {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 14px; outline: none; transition: border-color 0.2s;
+}
+.login-field input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.login-btn {
+  width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none; border-radius: var(--radius);
+  font-size: 15px; font-weight: 600; cursor: pointer; margin-top: 8px; transition: background 0.2s;
+}
+.login-btn:hover { background: var(--accent-hover); }
+.login-error { color: var(--danger); font-size: 13px; margin-top: 12px; }
+
+/* ── Header ── */
+.header {
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  padding: 0 24px;
+  display: flex; align-items: center; justify-content: space-between;
+  height: 56px;
+  position: sticky; top: 0; z-index: 100;
+  box-shadow: var(--shadow);
+}
+.header-left { display: flex; align-items: center; gap: 32px; }
+.header-brand { font-size: 16px; font-weight: 700; color: var(--accent); display: flex; align-items: center; gap: 8px; }
+.header-brand svg { width: 24px; height: 24px; }
+
+/* ── Navigation ── */
+.nav { display: flex; gap: 4px; height: 56px; }
+.nav-item {
+  padding: 0 16px; height: 100%; display: flex; align-items: center;
+  font-size: 13px; font-weight: 500; color: var(--text-secondary);
+  cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s;
+  white-space: nowrap; user-select: none;
+}
+.nav-item:hover { color: var(--text); background: var(--bg); }
+.nav-item.active { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+
+.header-right { display: flex; align-items: center; gap: 16px; }
+.user-badge {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 13px; color: var(--text-secondary);
+}
+.user-badge .role {
+  background: var(--accent-light); color: var(--accent); padding: 2px 8px;
+  border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase;
+}
+.logout-btn {
+  padding: 6px 12px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius);
+  font-size: 12px; cursor: pointer; color: var(--text-secondary); transition: all 0.2s;
+}
+.logout-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+/* ── Main Content ── */
+.main { padding: 24px; max-width: 1400px; margin: 0 auto; }
+
+/* ── Cards ── */
+.card {
+  background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow);
+  border: 1px solid var(--border); padding: 24px; margin-bottom: 20px;
+}
+.card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.card-title { font-size: 16px; font-weight: 700; }
+.card-subtitle { font-size: 13px; color: var(--text-secondary); }
+
+/* ── KPI Cards ── */
+.kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.kpi-card {
+  background: var(--surface); border-radius: var(--radius-lg); padding: 20px 24px;
+  border: 1px solid var(--border); box-shadow: var(--shadow);
+}
+.kpi-label { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+.kpi-value { font-size: 28px; font-weight: 700; line-height: 1.2; }
+.kpi-sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+.kpi-card.accent .kpi-value { color: var(--accent); }
+.kpi-card.success .kpi-value { color: var(--success); }
+.kpi-card.warning .kpi-value { color: var(--warning); }
+.kpi-card.danger .kpi-value { color: var(--danger); }
+
+/* ── Charts ── */
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 24px; }
+.chart-card { background: var(--surface); border-radius: var(--radius-lg); padding: 20px; border: 1px solid var(--border); box-shadow: var(--shadow); }
+.chart-card h3 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: var(--text-secondary); }
+.chart-card canvas { width: 100% !important; max-height: 250px; }
+
+/* ── Tables ── */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 12px; font-weight: 600; color: var(--text-secondary); border-bottom: 2px solid var(--border); font-size: 12px; text-transform: uppercase; letter-spacing: 0.3px; white-space: nowrap; }
+td { padding: 10px 12px; border-bottom: 1px solid var(--border); }
+tr:hover td { background: #f8fafc; }
+tr:last-child td { border-bottom: none; }
+
+/* ── Status Badges ── */
+.badge { display: inline-block; padding: 3px 10px; border-radius: 10px; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
+.badge-draft { background: #f1f5f9; color: #64748b; }
+.badge-approved { background: var(--accent-light); color: var(--accent); }
+.badge-live { background: var(--success-light); color: var(--success); }
+.badge-completed { background: #f1f5f9; color: #334155; }
+.badge-rejected { background: var(--danger-light); color: var(--danger); }
+
+/* ── Buttons ── */
+.btn {
+  padding: 8px 16px; border-radius: var(--radius); font-size: 13px; font-weight: 600;
+  cursor: pointer; border: 1px solid transparent; transition: all 0.2s; display: inline-flex;
+  align-items: center; gap: 6px; white-space: nowrap;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-success { background: var(--success); color: #fff; }
+.btn-success:hover { background: #15803d; }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger:hover { background: #b91c1c; }
+.btn-outline { background: var(--surface); color: var(--text); border-color: var(--border); }
+.btn-outline:hover { background: var(--bg); border-color: #94a3b8; }
+.btn-sm { padding: 5px 10px; font-size: 12px; }
+.btn-group { display: flex; gap: 8px; flex-wrap: wrap; }
+
+/* ── Forms ── */
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: var(--text-secondary); }
+.form-input, .form-select {
+  width: 100%; padding: 9px 12px; border: 1px solid var(--border); border-radius: var(--radius);
+  font-size: 14px; outline: none; transition: border-color 0.2s; background: var(--surface);
+}
+.form-input:focus, .form-select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+textarea.form-input { min-height: 80px; resize: vertical; font-family: inherit; }
+
+/* ── Steps indicator ── */
+.steps { display: flex; gap: 0; margin-bottom: 32px; }
+.step {
+  flex: 1; text-align: center; padding: 12px 8px; font-size: 13px; font-weight: 500;
+  color: var(--text-secondary); background: var(--bg); border-bottom: 3px solid var(--border);
+  position: relative; transition: all 0.2s;
+}
+.step.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--accent-light); font-weight: 600; }
+.step.done { color: var(--success); border-bottom-color: var(--success); }
+.step-num { display: block; font-size: 11px; font-weight: 700; margin-bottom: 2px; }
+
+/* ── SOA Warning ── */
+.soa-warn { background: var(--danger-light); color: var(--danger); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+.soa-ok { color: var(--success); font-size: 12px; font-weight: 600; }
+
+/* ── Product Search ── */
+.search-box { position: relative; margin-bottom: 16px; }
+.search-box input { width: 100%; padding: 10px 14px 10px 36px; border: 1px solid var(--border); border-radius: var(--radius); font-size: 14px; outline: none; }
+.search-box input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.search-box svg { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); width: 18px; height: 18px; }
+
+/* ── Filter bar ── */
+.filter-bar { display: flex; gap: 12px; flex-wrap: wrap; margin-bottom: 20px; align-items: end; }
+.filter-bar .form-group { margin-bottom: 0; min-width: 160px; }
+.filter-bar .form-group label { font-size: 11px; }
+
+/* ── Product selector dropdown ── */
+.product-dropdown { position: absolute; top: 100%; left: 0; right: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); max-height: 240px; overflow-y: auto; z-index: 50; box-shadow: var(--shadow-lg); }
+.product-dropdown-item { padding: 8px 14px; font-size: 13px; cursor: pointer; display: flex; justify-content: space-between; }
+.product-dropdown-item:hover { background: var(--accent-light); }
+.product-dropdown-item .sku { color: var(--text-secondary); font-size: 11px; }
+
+/* ── Deal lines table ── */
+.deal-lines-table th { font-size: 11px; padding: 8px 6px; }
+.deal-lines-table td { padding: 8px 6px; font-size: 13px; }
+.deal-lines-table input { width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px; font-size: 13px; text-align: right; }
+.deal-lines-table input:focus { border-color: var(--accent); outline: none; }
+.remove-line { color: var(--danger); cursor: pointer; font-size: 16px; padding: 4px; border: none; background: none; }
+.remove-line:hover { background: var(--danger-light); border-radius: 4px; }
+
+/* ── Summary box ── */
+.summary-box {
+  background: #f8fafc; border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 20px; display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px;
+}
+.summary-item label { font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; display: block; margin-bottom: 4px; }
+.summary-item .val { font-size: 20px; font-weight: 700; }
+
+/* ── Approval modal ── */
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200;
+  display: flex; align-items: center; justify-content: center;
+}
+.modal {
+  background: var(--surface); border-radius: var(--radius-lg); padding: 32px;
+  width: 480px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+}
+.modal h3 { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+
+/* ── Toast ── */
+.toast {
+  position: fixed; bottom: 24px; right: 24px; background: #334155; color: #fff;
+  padding: 12px 20px; border-radius: var(--radius); font-size: 14px; z-index: 300;
+  box-shadow: var(--shadow-lg); animation: slideUp 0.3s ease;
+}
+.toast.success { background: var(--success); }
+.toast.error { background: var(--danger); }
+@keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+/* ── Finance view ── */
+.finance-table th, .finance-table td { text-align: right; }
+.finance-table th:first-child, .finance-table td:first-child { text-align: left; }
+
+/* ── Empty state ── */
+.empty-state { text-align: center; padding: 60px 20px; color: var(--text-secondary); }
+.empty-state svg { width: 48px; height: 48px; margin-bottom: 12px; opacity: 0.4; }
+.empty-state h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 4px; }
+
+/* ── Loading ── */
+.loading { text-align: center; padding: 40px; color: var(--text-secondary); }
+.spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; margin-bottom: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+  .header { padding: 0 12px; }
+  .nav-item { padding: 0 10px; font-size: 12px; }
+  .main { padding: 16px; }
+  .kpi-grid { grid-template-columns: 1fr 1fr; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .form-row, .form-row-3 { grid-template-columns: 1fr; }
+  .filter-bar { flex-direction: column; }
+  .summary-box { grid-template-columns: 1fr 1fr; }
+  .header-brand span { display: none; }
+  .login-card { padding: 32px 24px; }
+}
+@media (max-width: 480px) {
+  .kpi-grid { grid-template-columns: 1fr; }
+  .summary-box { grid-template-columns: 1fr; }
+  .nav { overflow-x: auto; }
+}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+/* ═══════════════════════════════════════════════════════════════
+   Hombli Deal Framework — Single-Page Application
+   ═══════════════════════════════════════════════════════════════ */
+
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
+
+/* ── Configuration ── */
+const CONFIG = {
+  // Google Sheets published CSV URLs — replace with your actual Sheet ID
+  SHEET_ID: 'YOUR_GOOGLE_SHEET_ID',
+  APPS_SCRIPT_URL: 'YOUR_APPS_SCRIPT_WEB_APP_URL',
+
+  // CSV URLs for each tab (replace SHEET_ID and GID)
+  getSheetUrl(gid) {
+    return `https://docs.google.com/spreadsheets/d/${this.SHEET_ID}/export?format=csv&gid=${gid}`;
+  },
+
+  // Tab GIDs — update after creating the Google Sheet
+  GID_PRODUCTS: '0',
+  GID_DEALS: '1',
+  GID_DEALLINES: '2',
+  GID_USERS: '3',
+  GID_AUDITLOG: '4',
+  GID_CONFIG: '5',
+
+  // Commission tiers
+  COMMISSION_TIERS: [
+    { maxMargin: 0.25, rate: 0.10 },
+    { maxMargin: 0.35, rate: 0.15 },
+    { maxMargin: 0.40, rate: 0.20 },
+    { maxMargin: Infinity, rate: 0.22 },
+  ],
+
+  STATUS: {
+    DRAFT: 'Draft',
+    APPROVED: 'Approved',
+    LIVE: 'Live',
+    COMPLETED: 'Completed',
+    REJECTED: 'Rejected',
+  },
+};
+
+/* ── Calculator Engine ── */
+const Calculator = {
+  actualSOA(listPrice, soldPrice) {
+    return Math.max(0, listPrice - soldPrice);
+  },
+
+  soaCheck(actualSOA, maxSOA) {
+    return actualSOA > maxSOA ? 'ABOVE MAX' : 'OK';
+  },
+
+  marginPerUnit(soldPrice, landedCost) {
+    return soldPrice - landedCost;
+  },
+
+  marginPercent(soldPrice, landedCost) {
+    if (soldPrice <= 0) return 0;
+    return (soldPrice - landedCost) / soldPrice;
+  },
+
+  commissionRate(marginPercent) {
+    for (const tier of CONFIG.COMMISSION_TIERS) {
+      if (marginPercent < tier.maxMargin) return tier.rate;
+    }
+    return 0.22;
+  },
+
+  commissionAmount(commissionRate, marginPerUnit, quantity) {
+    return commissionRate * marginPerUnit * quantity;
+  },
+
+  lineRevenue(soldPrice, quantity) {
+    return soldPrice * quantity;
+  },
+
+  computeLine(line, product) {
+    if (!product) return line;
+    const soldPrice = parseFloat(line.soldPrice) || 0;
+    const quantity = parseInt(line.quantity) || 0;
+    const listPrice = parseFloat(product.listPrice) || 0;
+    const landedCost = parseFloat(product.landedCost) || 0;
+    const maxSOA = parseFloat(product.maxSOA) || 0;
+
+    const actualSOA = this.actualSOA(listPrice, soldPrice);
+    const soaCheck = this.soaCheck(actualSOA, maxSOA);
+    const margin = this.marginPerUnit(soldPrice, landedCost);
+    const marginPct = this.marginPercent(soldPrice, landedCost);
+    const commRate = this.commissionRate(marginPct);
+    const commAmount = this.commissionAmount(commRate, margin, quantity);
+    const revenue = this.lineRevenue(soldPrice, quantity);
+
+    return {
+      ...line,
+      actualSOA,
+      soaCheck,
+      marginPerUnit: margin,
+      marginPercent: marginPct,
+      commissionRate: commRate,
+      commissionAmount: commAmount,
+      lineRevenue: revenue,
+    };
+  },
+
+  computeDealTotals(lines) {
+    let totalSOA = 0, totalCommission = 0, totalRevenue = 0, totalWeightedMargin = 0, totalQty = 0;
+    for (const l of lines) {
+      const qty = parseInt(l.quantity) || 0;
+      totalSOA += (l.actualSOA || 0) * qty;
+      totalCommission += l.commissionAmount || 0;
+      totalRevenue += l.lineRevenue || 0;
+      totalWeightedMargin += (l.marginPercent || 0) * (l.lineRevenue || 0);
+      totalQty += qty;
+    }
+    const avgMargin = totalRevenue > 0 ? totalWeightedMargin / totalRevenue : 0;
+    return { totalSOA, totalCommission, totalRevenue, avgMargin };
+  },
+};
+
+/* ── Formatting helpers ── */
+const fmt = {
+  eur: (v) => '€' + (parseFloat(v) || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }),
+  pct: (v) => ((parseFloat(v) || 0) * 100).toFixed(1) + '%',
+  date: (d) => {
+    if (!d) return '—';
+    const dt = new Date(d);
+    if (isNaN(dt)) return d;
+    return dt.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  },
+  num: (v) => (parseInt(v) || 0).toLocaleString(),
+};
+
+/* ── Generate Deal ID ── */
+function generateDealId() {
+  const now = new Date();
+  const ts = now.getFullYear().toString().slice(2) +
+    String(now.getMonth() + 1).padStart(2, '0') +
+    String(now.getDate()).padStart(2, '0') +
+    String(now.getHours()).padStart(2, '0') +
+    String(now.getMinutes()).padStart(2, '0');
+  const rand = Math.random().toString(36).substring(2, 5).toUpperCase();
+  return `D-${ts}-${rand}`;
+}
+
+/* ── Demo Data ── */
+const DEMO_PRODUCTS = [
+  { sku: 'HBSB-0100', name: 'Smart Bulb E27 White', landedCost: 3.50, listPrice: 12.99, maxSOA: 3.00, defaultNetPrice: 9.99 },
+  { sku: 'HBSB-0101', name: 'Smart Bulb E27 Color', landedCost: 5.20, listPrice: 17.99, maxSOA: 4.00, defaultNetPrice: 13.99 },
+  { sku: 'HBSB-0102', name: 'Smart Bulb GU10 White', landedCost: 3.20, listPrice: 11.99, maxSOA: 2.50, defaultNetPrice: 9.49 },
+  { sku: 'HBSB-0103', name: 'Smart Bulb GU10 Color', landedCost: 4.80, listPrice: 15.99, maxSOA: 3.50, defaultNetPrice: 12.49 },
+  { sku: 'HBSB-0104', name: 'Smart Bulb E14 White', landedCost: 3.30, listPrice: 12.49, maxSOA: 2.50, defaultNetPrice: 9.99 },
+  { sku: 'HBSB-0105', name: 'Smart Bulb E14 Color', landedCost: 5.00, listPrice: 16.99, maxSOA: 3.50, defaultNetPrice: 13.49 },
+  { sku: 'HBSP-0200', name: 'Smart Plug EU', landedCost: 4.00, listPrice: 14.99, maxSOA: 3.00, defaultNetPrice: 11.99 },
+  { sku: 'HBSP-0201', name: 'Smart Plug EU (2-pack)', landedCost: 7.50, listPrice: 24.99, maxSOA: 5.00, defaultNetPrice: 19.99 },
+  { sku: 'HBSP-0202', name: 'Smart Power Strip', landedCost: 12.00, listPrice: 34.99, maxSOA: 7.00, defaultNetPrice: 27.99 },
+  { sku: 'HBSC-0300', name: 'Smart Indoor Camera', landedCost: 14.00, listPrice: 39.99, maxSOA: 8.00, defaultNetPrice: 31.99 },
+  { sku: 'HBSC-0301', name: 'Smart Outdoor Camera', landedCost: 22.00, listPrice: 69.99, maxSOA: 12.00, defaultNetPrice: 57.99 },
+  { sku: 'HBSC-0302', name: 'Smart Doorbell Camera', landedCost: 28.00, listPrice: 89.99, maxSOA: 15.00, defaultNetPrice: 74.99 },
+  { sku: 'HBSC-0303', name: 'Smart Pan/Tilt Camera', landedCost: 18.00, listPrice: 49.99, maxSOA: 10.00, defaultNetPrice: 39.99 },
+  { sku: 'HBSL-0400', name: 'Smart LED Strip 2m', landedCost: 6.00, listPrice: 24.99, maxSOA: 5.00, defaultNetPrice: 19.99 },
+  { sku: 'HBSL-0401', name: 'Smart LED Strip 5m', landedCost: 10.00, listPrice: 39.99, maxSOA: 8.00, defaultNetPrice: 31.99 },
+  { sku: 'HBSL-0402', name: 'Smart Outdoor LED Strip 5m', landedCost: 16.00, listPrice: 54.99, maxSOA: 10.00, defaultNetPrice: 44.99 },
+  { sku: 'HBSS-0500', name: 'Smart Sensor (Temp/Humidity)', landedCost: 5.00, listPrice: 19.99, maxSOA: 4.00, defaultNetPrice: 15.99 },
+  { sku: 'HBSS-0501', name: 'Smart Motion Sensor', landedCost: 6.00, listPrice: 22.99, maxSOA: 4.50, defaultNetPrice: 18.49 },
+  { sku: 'HBSS-0502', name: 'Smart Door/Window Sensor', landedCost: 4.50, listPrice: 17.99, maxSOA: 3.50, defaultNetPrice: 14.49 },
+  { sku: 'HBSS-0503', name: 'Smart Water Leak Sensor', landedCost: 5.50, listPrice: 21.99, maxSOA: 4.00, defaultNetPrice: 17.99 },
+  { sku: 'HBSH-0600', name: 'Smart Heater Panel 350W', landedCost: 45.00, listPrice: 129.99, maxSOA: 20.00, defaultNetPrice: 109.99 },
+  { sku: 'HBSH-0601', name: 'Smart Heater Panel 600W', landedCost: 65.00, listPrice: 179.99, maxSOA: 25.00, defaultNetPrice: 154.99 },
+  { sku: 'HBSH-0602', name: 'Smart Thermostat', landedCost: 30.00, listPrice: 89.99, maxSOA: 15.00, defaultNetPrice: 74.99 },
+  { sku: 'HBSIR-0700', name: 'Smart IR Remote', landedCost: 8.00, listPrice: 29.99, maxSOA: 6.00, defaultNetPrice: 23.99 },
+  { sku: 'HBSW-0800', name: 'Smart Switch (Single)', landedCost: 7.00, listPrice: 24.99, maxSOA: 5.00, defaultNetPrice: 19.99 },
+  { sku: 'HBSW-0801', name: 'Smart Switch (Double)', landedCost: 9.00, listPrice: 29.99, maxSOA: 6.00, defaultNetPrice: 23.99 },
+  { sku: 'HBSD-0900', name: 'Smart Smoke Detector', landedCost: 12.00, listPrice: 39.99, maxSOA: 8.00, defaultNetPrice: 31.99 },
+  { sku: 'HBSD-0901', name: 'Smart CO Detector', landedCost: 14.00, listPrice: 44.99, maxSOA: 8.00, defaultNetPrice: 36.99 },
+  { sku: 'HBSG-1000', name: 'Smart Garden Sensor', landedCost: 8.00, listPrice: 29.99, maxSOA: 6.00, defaultNetPrice: 23.99 },
+  { sku: 'HBSG-1001', name: 'Smart Irrigation Controller', landedCost: 20.00, listPrice: 59.99, maxSOA: 10.00, defaultNetPrice: 49.99 },
+];
+
+const DEMO_USERS = [
+  { username: 'admin', password: 'admin', role: 'hq', displayName: 'HQ Admin', country: 'All', active: true },
+  { username: 'marco', password: 'marco', role: 'agent', displayName: 'Marco Rossi', country: 'Switzerland', active: true },
+  { username: 'anna', password: 'anna', role: 'agent', displayName: 'Anna Weber', country: 'Switzerland', active: true },
+  { username: 'demo', password: 'demo', role: 'agent', displayName: 'Demo Agent', country: 'Switzerland', active: true },
+];
+
+const DEMO_CONFIG = {
+  countries: ['Switzerland'],
+  retailers: {
+    'Switzerland': ['Digitec Galaxus', 'Brack.ch', 'Microspot', 'STEG Electronics', 'Interdiscount', 'MediaMarkt CH'],
+  },
+};
+
+// Generate some demo deals
+function generateDemoDeals() {
+  const deals = [
+    {
+      id: 'D-260315-A1X', agent: 'Marco Rossi', country: 'Switzerland', retailer: 'Digitec Galaxus',
+      periodStart: '2026-04-01', periodEnd: '2026-06-30', status: 'Approved', createdDate: '2026-03-15',
+      approvedBy: 'HQ Admin', approvalDate: '2026-03-18', notes: 'Q2 promo deal',
+      totalSOA: 1250, totalCommission: 820, totalRevenue: 18500, avgMargin: 0.32,
+    },
+    {
+      id: 'D-260320-B2Y', agent: 'Marco Rossi', country: 'Switzerland', retailer: 'Brack.ch',
+      periodStart: '2026-04-15', periodEnd: '2026-05-15', status: 'Draft', createdDate: '2026-03-20',
+      approvedBy: '', approvalDate: '', notes: 'Spring campaign',
+      totalSOA: 680, totalCommission: 450, totalRevenue: 9200, avgMargin: 0.29,
+    },
+    {
+      id: 'D-260322-C3Z', agent: 'Anna Weber', country: 'Switzerland', retailer: 'MediaMarkt CH',
+      periodStart: '2026-05-01', periodEnd: '2026-07-31', status: 'Live', createdDate: '2026-03-22',
+      approvedBy: 'HQ Admin', approvalDate: '2026-03-25', notes: 'Summer sale',
+      totalSOA: 2100, totalCommission: 1380, totalRevenue: 32400, avgMargin: 0.35,
+    },
+    {
+      id: 'D-260325-D4W', agent: 'Anna Weber', country: 'Switzerland', retailer: 'Interdiscount',
+      periodStart: '2026-04-01', periodEnd: '2026-04-30', status: 'Rejected', createdDate: '2026-03-25',
+      approvedBy: 'HQ Admin', approvalDate: '2026-03-26', notes: 'Margins too low',
+      totalSOA: 3200, totalCommission: 280, totalRevenue: 5800, avgMargin: 0.18,
+    },
+    {
+      id: 'D-260328-E5V', agent: 'Marco Rossi', country: 'Switzerland', retailer: 'Microspot',
+      periodStart: '2026-04-01', periodEnd: '2026-06-30', status: 'Draft', createdDate: '2026-03-28',
+      approvedBy: '', approvalDate: '', notes: '',
+      totalSOA: 900, totalCommission: 620, totalRevenue: 14200, avgMargin: 0.31,
+    },
+  ];
+  return deals;
+}
+
+function generateDemoDealLines() {
+  return {
+    'D-260315-A1X': [
+      { dealId: 'D-260315-A1X', sku: 'HBSB-0100', soldPrice: 10.99, quantity: 500 },
+      { dealId: 'D-260315-A1X', sku: 'HBSC-0300', soldPrice: 34.99, quantity: 200 },
+      { dealId: 'D-260315-A1X', sku: 'HBSL-0400', soldPrice: 21.99, quantity: 150 },
+    ],
+    'D-260320-B2Y': [
+      { dealId: 'D-260320-B2Y', sku: 'HBSP-0200', soldPrice: 12.99, quantity: 300 },
+      { dealId: 'D-260320-B2Y', sku: 'HBSS-0500', soldPrice: 17.49, quantity: 200 },
+    ],
+    'D-260322-C3Z': [
+      { dealId: 'D-260322-C3Z', sku: 'HBSH-0600', soldPrice: 109.99, quantity: 100 },
+      { dealId: 'D-260322-C3Z', sku: 'HBSH-0601', soldPrice: 154.99, quantity: 80 },
+      { dealId: 'D-260322-C3Z', sku: 'HBSC-0301', soldPrice: 59.99, quantity: 120 },
+    ],
+    'D-260325-D4W': [
+      { dealId: 'D-260325-D4W', sku: 'HBSB-0100', soldPrice: 8.99, quantity: 400 },
+      { dealId: 'D-260325-D4W', sku: 'HBSB-0101', soldPrice: 12.99, quantity: 200 },
+    ],
+    'D-260328-E5V': [
+      { dealId: 'D-260328-E5V', sku: 'HBSW-0800', soldPrice: 21.99, quantity: 250 },
+      { dealId: 'D-260328-E5V', sku: 'HBSD-0900', soldPrice: 34.99, quantity: 150 },
+    ],
+  };
+}
+
+
+/* ═══════════════════════════════════════════════
+   Main App Component
+   ═══════════════════════════════════════════════ */
+function App() {
+  const [user, setUser] = useState(null);
+  const [page, setPage] = useState('dashboard');
+  const [products, setProducts] = useState(DEMO_PRODUCTS);
+  const [deals, setDeals] = useState(generateDemoDeals());
+  const [dealLines, setDealLines] = useState(generateDemoDealLines());
+  const [config, setConfig] = useState(DEMO_CONFIG);
+  const [toast, setToast] = useState(null);
+  const [dataSource, setDataSource] = useState('demo'); // 'demo' or 'sheets'
+
+  // Recompute deal line calculations
+  const computedDealLines = useMemo(() => {
+    const result = {};
+    for (const [dealId, lines] of Object.entries(dealLines)) {
+      result[dealId] = lines.map(line => {
+        const product = products.find(p => p.sku === line.sku);
+        return Calculator.computeLine(line, product);
+      });
+    }
+    return result;
+  }, [dealLines, products]);
+
+  // Recompute deal totals
+  const computedDeals = useMemo(() => {
+    return deals.map(deal => {
+      const lines = computedDealLines[deal.id] || [];
+      const totals = Calculator.computeDealTotals(lines);
+      return { ...deal, ...totals };
+    });
+  }, [deals, computedDealLines]);
+
+  // Restore session
+  useEffect(() => {
+    const saved = sessionStorage.getItem('df_user');
+    if (saved) {
+      try { setUser(JSON.parse(saved)); } catch(e) {}
+    }
+  }, []);
+
+  // Try loading from Google Sheets
+  useEffect(() => {
+    if (CONFIG.SHEET_ID !== 'YOUR_GOOGLE_SHEET_ID') {
+      loadFromSheets();
+    }
+  }, []);
+
+  async function loadFromSheets() {
+    try {
+      const urls = {
+        products: CONFIG.getSheetUrl(CONFIG.GID_PRODUCTS),
+        deals: CONFIG.getSheetUrl(CONFIG.GID_DEALS),
+        dealLines: CONFIG.getSheetUrl(CONFIG.GID_DEALLINES),
+      };
+      // Load products
+      const prodRes = await new Promise((resolve, reject) => {
+        Papa.parse(urls.products, { download: true, header: true, complete: resolve, error: reject });
+      });
+      if (prodRes.data && prodRes.data.length > 0) {
+        setProducts(prodRes.data.map(r => ({
+          sku: r['SKU'] || r['sku'],
+          name: r['Product Name'] || r['name'],
+          landedCost: parseFloat(r['Landed Cost (€)'] || r['landedCost']) || 0,
+          listPrice: parseFloat(r['List Price (€)'] || r['listPrice']) || 0,
+          maxSOA: parseFloat(r['Max SOA (€)'] || r['maxSOA']) || 0,
+          defaultNetPrice: parseFloat(r['Default Net Price (€)'] || r['defaultNetPrice']) || 0,
+        })).filter(p => p.sku));
+        setDataSource('sheets');
+      }
+    } catch(e) {
+      console.log('Using demo data (Google Sheets not configured or unavailable)');
+    }
+  }
+
+  function showToast(message, type = 'info') {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  }
+
+  function handleLogin(u) {
+    setUser(u);
+    sessionStorage.setItem('df_user', JSON.stringify(u));
+  }
+
+  function handleLogout() {
+    setUser(null);
+    sessionStorage.removeItem('df_user');
+    setPage('dashboard');
+  }
+
+  function addDeal(deal, lines) {
+    setDeals(prev => [deal, ...prev]);
+    setDealLines(prev => ({ ...prev, [deal.id]: lines }));
+    showToast('Deal created successfully', 'success');
+    // Write to Google Sheets if configured
+    if (CONFIG.APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+      writeDealToSheet(deal, lines);
+    }
+  }
+
+  function updateDealStatus(dealId, newStatus, reason = '') {
+    setDeals(prev => prev.map(d => {
+      if (d.id !== dealId) return d;
+      return {
+        ...d,
+        status: newStatus,
+        approvedBy: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? user.displayName : d.approvedBy,
+        approvalDate: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? new Date().toISOString().split('T')[0] : d.approvalDate,
+        notes: reason || d.notes,
+      };
+    }));
+    showToast(`Deal ${newStatus.toLowerCase()}`, newStatus === CONFIG.STATUS.REJECTED ? 'error' : 'success');
+    // Write status change to sheet
+    if (CONFIG.APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+      writeAuditLog(dealId, 'status_change', user.displayName, '', newStatus, reason);
+    }
+  }
+
+  async function writeDealToSheet(deal, lines) {
+    try {
+      await fetch(CONFIG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'addDeal', deal, lines }),
+      });
+    } catch(e) { console.error('Sheet write failed:', e); }
+  }
+
+  async function writeAuditLog(dealId, action, usr, oldStatus, newStatus, notes) {
+    try {
+      await fetch(CONFIG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        body: JSON.stringify({ action: 'auditLog', dealId, logAction: action, user: usr, oldStatus, newStatus, notes }),
+      });
+    } catch(e) { console.error('Audit log write failed:', e); }
+  }
+
+  const isHQ = user && user.role === 'hq';
+
+  const navItems = [
+    { id: 'dashboard', label: 'Dashboard' },
+    { id: 'newdeal', label: 'New Deal' },
+    { id: 'mydeals', label: 'My Deals' },
+    ...(isHQ ? [{ id: 'alldeals', label: 'All Deals' }] : []),
+    { id: 'products', label: 'Products' },
+  ];
+
+  if (!user) {
+    return <LoginScreen onLogin={handleLogin} users={DEMO_USERS} />;
+  }
+
+  return (
+    <div>
+      {/* Header */}
+      <div className="header">
+        <div className="header-left">
+          <div className="header-brand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+            <span>Deal Framework</span>
+          </div>
+          <nav className="nav">
+            {navItems.map(item => (
+              <div key={item.id} className={`nav-item ${page === item.id ? 'active' : ''}`} onClick={() => setPage(item.id)}>
+                {item.label}
+              </div>
+            ))}
+          </nav>
+        </div>
+        <div className="header-right">
+          <div className="user-badge">
+            {user.displayName}
+            <span className="role">{user.role}</span>
+          </div>
+          <button className="logout-btn" onClick={handleLogout}>Logout</button>
+        </div>
+      </div>
+
+      {/* Content */}
+      <div className="main">
+        {dataSource === 'demo' && (
+          <div style={{ background: '#fef3c7', border: '1px solid #f59e0b', borderRadius: 8, padding: '10px 16px', marginBottom: 20, fontSize: 13, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <strong>Demo Mode</strong> — Using sample data. Connect Google Sheets for live data (see README).
+          </div>
+        )}
+
+        {page === 'dashboard' && <DashboardPage deals={computedDeals} dealLines={computedDealLines} user={user} isHQ={isHQ} setPage={setPage} />}
+        {page === 'newdeal' && <NewDealPage products={products} config={config} user={user} onSubmit={addDeal} onComplete={() => setPage('mydeals')} isHQ={isHQ} />}
+        {page === 'mydeals' && <MyDealsPage deals={computedDeals} dealLines={computedDealLines} user={user} products={products} isHQ={isHQ} />}
+        {page === 'alldeals' && isHQ && <AllDealsPage deals={computedDeals} dealLines={computedDealLines} user={user} products={products} onStatusChange={updateDealStatus} />}
+        {page === 'products' && <ProductsPage products={products} isHQ={isHQ} />}
+      </div>
+
+      {/* Toast */}
+      {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   Login Screen
+   ═══════════════════════════════════════════════ */
+function LoginScreen({ onLogin, users }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    const u = users.find(u => u.username === username.toLowerCase() && u.password === password && u.active);
+    if (u) {
+      onLogin({ username: u.username, role: u.role, displayName: u.displayName, country: u.country });
+      setError('');
+    } else {
+      setError('Invalid username or password');
+    }
+  }
+
+  return (
+    <div className="login-overlay">
+      <div className="login-card">
+        <div className="logo-text">HOMBLI</div>
+        <h1>Deal Framework</h1>
+        <p>Deal Planning & Commission Management</p>
+        <form onSubmit={handleSubmit}>
+          <div className="login-field">
+            <label>Username</label>
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" autoFocus />
+          </div>
+          <div className="login-field">
+            <label>Password</label>
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+          </div>
+          <button type="submit" className="login-btn">Sign In</button>
+        </form>
+        {error && <div className="login-error">{error}</div>}
+        <div style={{ marginTop: 24, fontSize: 12, color: '#94a3b8' }}>
+          Demo: admin/admin (HQ) · marco/marco · anna/anna · demo/demo
+        </div>
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   Dashboard Page
+   ═══════════════════════════════════════════════ */
+function DashboardPage({ deals, dealLines, user, isHQ, setPage }) {
+  const chartRef1 = useRef(null);
+  const chartRef2 = useRef(null);
+  const chartRef3 = useRef(null);
+  const chartRef4 = useRef(null);
+  const chartInstances = useRef({});
+
+  const visibleDeals = isHQ ? deals : deals.filter(d => d.agent === user.displayName);
+  const activeDeals = visibleDeals.filter(d => ['Draft', 'Approved', 'Live'].includes(d.status));
+  const totalSOA = activeDeals.reduce((s, d) => s + (d.totalSOA || 0), 0);
+  const totalCommission = activeDeals.reduce((s, d) => s + (d.totalCommission || 0), 0);
+  const totalRevenue = activeDeals.reduce((s, d) => s + (d.totalRevenue || 0), 0);
+  const avgMargin = totalRevenue > 0 ? activeDeals.reduce((s, d) => s + (d.avgMargin || 0) * (d.totalRevenue || 0), 0) / totalRevenue : 0;
+
+  // Filters
+  const [filterCountry, setFilterCountry] = useState('');
+  const [filterAgent, setFilterAgent] = useState('');
+  const [filterStatus, setFilterStatus] = useState('');
+
+  const filteredDeals = visibleDeals.filter(d => {
+    if (filterCountry && d.country !== filterCountry) return false;
+    if (filterAgent && d.agent !== filterAgent) return false;
+    if (filterStatus && d.status !== filterStatus) return false;
+    return true;
+  });
+
+  const countries = [...new Set(visibleDeals.map(d => d.country))];
+  const agents = [...new Set(visibleDeals.map(d => d.agent))];
+
+  useEffect(() => {
+    // Destroy previous charts
+    Object.values(chartInstances.current).forEach(c => c.destroy());
+    chartInstances.current = {};
+
+    // SOA by Retailer
+    if (chartRef1.current) {
+      const byRetailer = {};
+      filteredDeals.filter(d => ['Draft', 'Approved', 'Live'].includes(d.status)).forEach(d => {
+        byRetailer[d.retailer] = (byRetailer[d.retailer] || 0) + (d.totalSOA || 0);
+      });
+      chartInstances.current.c1 = new Chart(chartRef1.current, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(byRetailer),
+          datasets: [{ label: 'SOA Exposure (€)', data: Object.values(byRetailer), backgroundColor: '#3b82f6' }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      });
+    }
+
+    // Commission by Agent
+    if (chartRef2.current) {
+      const byAgent = {};
+      filteredDeals.filter(d => ['Draft', 'Approved', 'Live'].includes(d.status)).forEach(d => {
+        byAgent[d.agent] = (byAgent[d.agent] || 0) + (d.totalCommission || 0);
+      });
+      chartInstances.current.c2 = new Chart(chartRef2.current, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(byAgent),
+          datasets: [{ label: 'Commission (€)', data: Object.values(byAgent), backgroundColor: '#8b5cf6' }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true } } },
+      });
+    }
+
+    // Deals by Status
+    if (chartRef3.current) {
+      const byStatus = {};
+      filteredDeals.forEach(d => { byStatus[d.status] = (byStatus[d.status] || 0) + 1; });
+      const statusColors = { Draft: '#94a3b8', Approved: '#3b82f6', Live: '#22c55e', Completed: '#334155', Rejected: '#ef4444' };
+      chartInstances.current.c3 = new Chart(chartRef3.current, {
+        type: 'doughnut',
+        data: {
+          labels: Object.keys(byStatus),
+          datasets: [{ data: Object.values(byStatus), backgroundColor: Object.keys(byStatus).map(s => statusColors[s] || '#94a3b8') }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12 } } } },
+      });
+    }
+
+    // Margin Distribution
+    if (chartRef4.current) {
+      const buckets = { '<20%': 0, '20-25%': 0, '25-30%': 0, '30-35%': 0, '35-40%': 0, '>40%': 0 };
+      filteredDeals.forEach(d => {
+        const m = (d.avgMargin || 0) * 100;
+        if (m < 20) buckets['<20%']++;
+        else if (m < 25) buckets['20-25%']++;
+        else if (m < 30) buckets['25-30%']++;
+        else if (m < 35) buckets['30-35%']++;
+        else if (m < 40) buckets['35-40%']++;
+        else buckets['>40%']++;
+      });
+      chartInstances.current.c4 = new Chart(chartRef4.current, {
+        type: 'bar',
+        data: {
+          labels: Object.keys(buckets),
+          datasets: [{ label: 'Deals', data: Object.values(buckets), backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#14b8a6', '#06b6d4'] }],
+        },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } },
+      });
+    }
+
+    return () => { Object.values(chartInstances.current).forEach(c => c.destroy()); };
+  }, [filteredDeals]);
+
+  // Finance / Accrual view: group active deals by month
+  const financeData = useMemo(() => {
+    const months = {};
+    activeDeals.forEach(d => {
+      const start = d.periodStart ? d.periodStart.substring(0, 7) : 'Unknown';
+      if (!months[start]) months[start] = { soa: 0, commission: 0, revenue: 0, deals: 0 };
+      months[start].soa += d.totalSOA || 0;
+      months[start].commission += d.totalCommission || 0;
+      months[start].revenue += d.totalRevenue || 0;
+      months[start].deals += 1;
+    });
+    return Object.entries(months).sort(([a], [b]) => a.localeCompare(b));
+  }, [activeDeals]);
+
+  function exportDashboard() {
+    const rows = filteredDeals.map(d => ({
+      'Deal ID': d.id, Agent: d.agent, Country: d.country, Retailer: d.retailer,
+      'Period Start': d.periodStart, 'Period End': d.periodEnd, Status: d.status,
+      'Total SOA (€)': (d.totalSOA || 0).toFixed(2),
+      'Total Commission (€)': (d.totalCommission || 0).toFixed(2),
+      'Total Revenue (€)': (d.totalRevenue || 0).toFixed(2),
+      'Avg Margin %': ((d.avgMargin || 0) * 100).toFixed(1) + '%',
+      'Created': d.createdDate, 'Approved By': d.approvedBy || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Deals');
+    // Add finance sheet
+    if (financeData.length > 0) {
+      const finRows = financeData.map(([month, d]) => ({
+        Month: month, 'SOA Liability (€)': d.soa.toFixed(2), 'Commission Liability (€)': d.commission.toFixed(2),
+        'Revenue (€)': d.revenue.toFixed(2), Deals: d.deals,
+      }));
+      const ws2 = XLSX.utils.json_to_sheet(finRows);
+      XLSX.utils.book_append_sheet(wb, ws2, 'Finance Accrual');
+    }
+    XLSX.writeFile(wb, `deal-framework-export-${new Date().toISOString().split('T')[0]}.xlsx`);
+  }
+
+  return (
+    <div>
+      {/* KPIs */}
+      <div className="kpi-grid">
+        <div className="kpi-card accent">
+          <div className="kpi-label">SOA Exposure</div>
+          <div className="kpi-value">{fmt.eur(totalSOA)}</div>
+          <div className="kpi-sub">{activeDeals.length} active deals</div>
+        </div>
+        <div className="kpi-card warning">
+          <div className="kpi-label">Commission Liability</div>
+          <div className="kpi-value">{fmt.eur(totalCommission)}</div>
+          <div className="kpi-sub">Pending + approved</div>
+        </div>
+        <div className="kpi-card success">
+          <div className="kpi-label">Total Revenue</div>
+          <div className="kpi-value">{fmt.eur(totalRevenue)}</div>
+          <div className="kpi-sub">Active deals</div>
+        </div>
+        <div className="kpi-card" style={{ borderLeft: avgMargin < 0.25 ? '4px solid var(--danger)' : '4px solid var(--success)' }}>
+          <div className="kpi-label">Avg Margin</div>
+          <div className="kpi-value">{fmt.pct(avgMargin)}</div>
+          <div className="kpi-sub">{avgMargin < 0.25 ? 'Below target' : 'Healthy'}</div>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="filter-bar">
+        {isHQ && (
+          <div className="form-group">
+            <label>Country</label>
+            <select className="form-select" value={filterCountry} onChange={e => setFilterCountry(e.target.value)}>
+              <option value="">All countries</option>
+              {countries.map(c => <option key={c}>{c}</option>)}
+            </select>
+          </div>
+        )}
+        {isHQ && (
+          <div className="form-group">
+            <label>Agent</label>
+            <select className="form-select" value={filterAgent} onChange={e => setFilterAgent(e.target.value)}>
+              <option value="">All agents</option>
+              {agents.map(a => <option key={a}>{a}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="form-group">
+          <label>Status</label>
+          <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All statuses</option>
+            {Object.values(CONFIG.STATUS).map(s => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="form-group" style={{ marginLeft: 'auto' }}>
+          <label>&nbsp;</label>
+          <button className="btn btn-outline" onClick={exportDashboard}>Export to Excel</button>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="chart-grid">
+        <div className="chart-card">
+          <h3>SOA Exposure by Retailer</h3>
+          <div style={{ height: 220 }}><canvas ref={chartRef1}></canvas></div>
+        </div>
+        <div className="chart-card">
+          <h3>Commission by Agent</h3>
+          <div style={{ height: 220 }}><canvas ref={chartRef2}></canvas></div>
+        </div>
+        <div className="chart-card">
+          <h3>Deals by Status</h3>
+          <div style={{ height: 220 }}><canvas ref={chartRef3}></canvas></div>
+        </div>
+        <div className="chart-card">
+          <h3>Margin Distribution</h3>
+          <div style={{ height: 220 }}><canvas ref={chartRef4}></canvas></div>
+        </div>
+      </div>
+
+      {/* Finance / Accrual Table */}
+      {isHQ && financeData.length > 0 && (
+        <div className="card">
+          <div className="card-header">
+            <div>
+              <div className="card-title">Finance & Accrual Overview</div>
+              <div className="card-subtitle">Upcoming SOA + commission liabilities by period</div>
+            </div>
+          </div>
+          <div className="table-wrap">
+            <table className="finance-table">
+              <thead>
+                <tr><th>Period</th><th>Deals</th><th>SOA Liability</th><th>Commission Liability</th><th>Revenue</th></tr>
+              </thead>
+              <tbody>
+                {financeData.map(([month, d]) => (
+                  <tr key={month}>
+                    <td>{month}</td><td>{d.deals}</td><td>{fmt.eur(d.soa)}</td><td>{fmt.eur(d.commission)}</td><td>{fmt.eur(d.revenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Recent Deals */}
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">Recent Deals</div>
+            <div className="card-subtitle">Last 10 deals</div>
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={() => setPage('newdeal')}>+ New Deal</button>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Deal ID</th><th>Agent</th><th>Retailer</th><th>Period</th>
+                <th>Status</th><th>SOA</th><th>Commission</th><th>Revenue</th><th>Margin</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredDeals.slice(0, 10).map(d => (
+                <tr key={d.id}>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{d.id}</td>
+                  <td>{d.agent}</td>
+                  <td>{d.retailer}</td>
+                  <td style={{ fontSize: 12 }}>{fmt.date(d.periodStart)} — {fmt.date(d.periodEnd)}</td>
+                  <td><StatusBadge status={d.status} /></td>
+                  <td>{fmt.eur(d.totalSOA)}</td>
+                  <td>{fmt.eur(d.totalCommission)}</td>
+                  <td>{fmt.eur(d.totalRevenue)}</td>
+                  <td>{fmt.pct(d.avgMargin)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {filteredDeals.length === 0 && (
+          <div className="empty-state">
+            <h3>No deals found</h3>
+            <p>Create your first deal to get started.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   New Deal Page — Multi-Step Form
+   ═══════════════════════════════════════════════ */
+function NewDealPage({ products, config, user, onSubmit, onComplete, isHQ }) {
+  const [step, setStep] = useState(1);
+  const [dealInfo, setDealInfo] = useState({
+    country: config.countries[0] || '',
+    retailer: '',
+    periodStart: '',
+    periodEnd: '',
+    notes: '',
+  });
+  const [lines, setLines] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [showDropdown, setShowDropdown] = useState(false);
+
+  const filteredProducts = products.filter(p =>
+    p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    p.sku.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const retailers = config.retailers[dealInfo.country] || [];
+
+  // Compute all lines
+  const computedLines = lines.map(line => {
+    const product = products.find(p => p.sku === line.sku);
+    return Calculator.computeLine(line, product);
+  });
+  const totals = Calculator.computeDealTotals(computedLines);
+
+  function addProductLine(product) {
+    if (lines.find(l => l.sku === product.sku)) return;
+    setLines(prev => [...prev, {
+      sku: product.sku,
+      productName: product.name,
+      soldPrice: product.defaultNetPrice.toFixed(2),
+      quantity: 1,
+    }]);
+    setSearchTerm('');
+    setShowDropdown(false);
+  }
+
+  function updateLine(index, field, value) {
+    setLines(prev => prev.map((l, i) => i === index ? { ...l, [field]: value } : l));
+  }
+
+  function removeLine(index) {
+    setLines(prev => prev.filter((_, i) => i !== index));
+  }
+
+  function handleSubmit() {
+    const dealId = generateDealId();
+    const deal = {
+      id: dealId,
+      agent: user.displayName,
+      country: dealInfo.country,
+      retailer: dealInfo.retailer,
+      periodStart: dealInfo.periodStart,
+      periodEnd: dealInfo.periodEnd,
+      status: CONFIG.STATUS.DRAFT,
+      createdDate: new Date().toISOString().split('T')[0],
+      approvedBy: '',
+      approvalDate: '',
+      notes: dealInfo.notes,
+    };
+    const dealLinesData = computedLines.map(l => ({
+      dealId,
+      sku: l.sku,
+      soldPrice: parseFloat(l.soldPrice) || 0,
+      quantity: parseInt(l.quantity) || 0,
+    }));
+    onSubmit(deal, dealLinesData);
+    onComplete();
+  }
+
+  const canProceedStep1 = dealInfo.country && dealInfo.retailer && dealInfo.periodStart && dealInfo.periodEnd;
+  const canProceedStep2 = lines.length > 0;
+
+  return (
+    <div>
+      {/* Steps */}
+      <div className="steps">
+        <div className={`step ${step === 1 ? 'active' : step > 1 ? 'done' : ''}`}>
+          <span className="step-num">1</span>Deal Info
+        </div>
+        <div className={`step ${step === 2 ? 'active' : step > 2 ? 'done' : ''}`}>
+          <span className="step-num">2</span>Products
+        </div>
+        <div className={`step ${step === 3 ? 'active' : step > 3 ? 'done' : ''}`}>
+          <span className="step-num">3</span>Review
+        </div>
+        <div className={`step ${step === 4 ? 'active' : ''}`}>
+          <span className="step-num">4</span>Submit
+        </div>
+      </div>
+
+      {/* Step 1: Deal Info */}
+      {step === 1 && (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 20 }}>Deal Information</div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Country / Region</label>
+              <select className="form-select" value={dealInfo.country}
+                onChange={e => setDealInfo({ ...dealInfo, country: e.target.value, retailer: '' })}>
+                <option value="">Select country</option>
+                {config.countries.map(c => <option key={c}>{c}</option>)}
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Retailer</label>
+              <select className="form-select" value={dealInfo.retailer}
+                onChange={e => setDealInfo({ ...dealInfo, retailer: e.target.value })}>
+                <option value="">Select retailer</option>
+                {retailers.map(r => <option key={r}>{r}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label>Deal Period Start</label>
+              <input type="date" className="form-input" value={dealInfo.periodStart}
+                onChange={e => setDealInfo({ ...dealInfo, periodStart: e.target.value })} />
+            </div>
+            <div className="form-group">
+              <label>Deal Period End</label>
+              <input type="date" className="form-input" value={dealInfo.periodEnd}
+                onChange={e => setDealInfo({ ...dealInfo, periodEnd: e.target.value })} />
+            </div>
+          </div>
+          <div className="form-group">
+            <label>Notes (optional)</label>
+            <textarea className="form-input" value={dealInfo.notes} onChange={e => setDealInfo({ ...dealInfo, notes: e.target.value })}
+              placeholder="Deal description, promo context, special terms..." />
+          </div>
+          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'flex-end' }}>
+            <button className="btn btn-primary" disabled={!canProceedStep1} onClick={() => setStep(2)}>
+              Next: Add Products
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 2: Add Products */}
+      {step === 2 && (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 20 }}>Add Products to Deal</div>
+
+          {/* Product Search */}
+          <div style={{ position: 'relative', marginBottom: 20 }}>
+            <div className="search-box">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+              </svg>
+              <input
+                placeholder="Search products by name or SKU..."
+                value={searchTerm}
+                onChange={e => { setSearchTerm(e.target.value); setShowDropdown(true); }}
+                onFocus={() => setShowDropdown(true)}
+              />
+            </div>
+            {showDropdown && searchTerm && (
+              <div className="product-dropdown">
+                {filteredProducts.slice(0, 15).map(p => (
+                  <div key={p.sku} className="product-dropdown-item" onClick={() => addProductLine(p)}>
+                    <span>{p.name}</span>
+                    <span>
+                      <span className="sku">{p.sku}</span>
+                      &nbsp;·&nbsp;{fmt.eur(p.listPrice)}
+                    </span>
+                  </div>
+                ))}
+                {filteredProducts.length === 0 && (
+                  <div style={{ padding: '12px 14px', color: '#94a3b8', fontSize: 13 }}>No products found</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Selected Lines */}
+          {lines.length > 0 && (
+            <div className="table-wrap">
+              <table className="deal-lines-table">
+                <thead>
+                  <tr>
+                    <th>SKU</th><th>Product</th><th>List Price</th><th>Max SOA</th>
+                    <th>Sold Price</th><th>Qty</th><th>SOA</th><th>SOA Check</th>
+                    <th>Margin %</th><th>Comm Rate</th><th>Line Revenue</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {computedLines.map((line, i) => {
+                    const product = products.find(p => p.sku === line.sku);
+                    return (
+                      <tr key={line.sku}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{line.sku}</td>
+                        <td style={{ fontSize: 12 }}>{line.productName || product?.name}</td>
+                        <td>{fmt.eur(product?.listPrice)}</td>
+                        <td>{fmt.eur(product?.maxSOA)}</td>
+                        <td>
+                          <input type="number" step="0.01" value={line.soldPrice}
+                            onChange={e => updateLine(i, 'soldPrice', e.target.value)} />
+                        </td>
+                        <td>
+                          <input type="number" min="1" value={line.quantity}
+                            onChange={e => updateLine(i, 'quantity', e.target.value)} style={{ width: 60 }} />
+                        </td>
+                        <td>{fmt.eur(line.actualSOA)}</td>
+                        <td>
+                          {line.soaCheck === 'ABOVE MAX'
+                            ? <span className="soa-warn">ABOVE MAX</span>
+                            : <span className="soa-ok">OK</span>}
+                        </td>
+                        <td style={{ color: (line.marginPercent || 0) < 0.25 ? 'var(--danger)' : 'var(--success)' }}>
+                          {fmt.pct(line.marginPercent)}
+                        </td>
+                        <td>{fmt.pct(line.commissionRate)}</td>
+                        <td>{fmt.eur(line.lineRevenue)}</td>
+                        <td><button className="remove-line" onClick={() => removeLine(i)} title="Remove">&times;</button></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {lines.length === 0 && (
+            <div className="empty-state">
+              <h3>No products added yet</h3>
+              <p>Search and select products from the catalog above.</p>
+            </div>
+          )}
+
+          {/* Totals Summary */}
+          {lines.length > 0 && (
+            <div className="summary-box" style={{ marginTop: 20 }}>
+              <div className="summary-item">
+                <label>Total SOA</label>
+                <div className="val" style={{ color: 'var(--accent)' }}>{fmt.eur(totals.totalSOA)}</div>
+              </div>
+              <div className="summary-item">
+                <label>Total Commission</label>
+                <div className="val" style={{ color: 'var(--warning)' }}>{fmt.eur(totals.totalCommission)}</div>
+              </div>
+              <div className="summary-item">
+                <label>Total Revenue</label>
+                <div className="val" style={{ color: 'var(--success)' }}>{fmt.eur(totals.totalRevenue)}</div>
+              </div>
+              <div className="summary-item">
+                <label>Avg Margin</label>
+                <div className="val" style={{ color: totals.avgMargin < 0.25 ? 'var(--danger)' : 'var(--success)' }}>
+                  {fmt.pct(totals.avgMargin)}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
+            <button className="btn btn-outline" onClick={() => setStep(1)}>Back</button>
+            <button className="btn btn-primary" disabled={!canProceedStep2} onClick={() => setStep(3)}>
+              Next: Review
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 3: Review */}
+      {step === 3 && (
+        <div className="card">
+          <div className="card-title" style={{ marginBottom: 20 }}>Review Deal</div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginBottom: 24 }}>
+            <div><strong>Country:</strong> {dealInfo.country}</div>
+            <div><strong>Retailer:</strong> {dealInfo.retailer}</div>
+            <div><strong>Period:</strong> {fmt.date(dealInfo.periodStart)} — {fmt.date(dealInfo.periodEnd)}</div>
+            <div><strong>Agent:</strong> {user.displayName}</div>
+            {dealInfo.notes && <div style={{ gridColumn: '1/3' }}><strong>Notes:</strong> {dealInfo.notes}</div>}
+          </div>
+
+          <div className="summary-box" style={{ marginBottom: 24 }}>
+            <div className="summary-item">
+              <label>Total SOA</label>
+              <div className="val" style={{ color: 'var(--accent)' }}>{fmt.eur(totals.totalSOA)}</div>
+            </div>
+            <div className="summary-item">
+              <label>Total Commission</label>
+              <div className="val" style={{ color: 'var(--warning)' }}>{fmt.eur(totals.totalCommission)}</div>
+            </div>
+            <div className="summary-item">
+              <label>Total Revenue</label>
+              <div className="val" style={{ color: 'var(--success)' }}>{fmt.eur(totals.totalRevenue)}</div>
+            </div>
+            <div className="summary-item">
+              <label>Avg Margin</label>
+              <div className="val">{fmt.pct(totals.avgMargin)}</div>
+            </div>
+          </div>
+
+          {/* Lines summary */}
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th><th>Sold Price</th><th>Qty</th><th>SOA</th><th>SOA Check</th>
+                  <th>Margin %</th><th>Commission</th><th>Revenue</th>
+                </tr>
+              </thead>
+              <tbody>
+                {computedLines.map((line, i) => (
+                  <tr key={i}>
+                    <td>{line.productName}</td>
+                    <td>{fmt.eur(line.soldPrice)}</td>
+                    <td>{fmt.num(line.quantity)}</td>
+                    <td>{fmt.eur(line.actualSOA)}</td>
+                    <td>{line.soaCheck === 'ABOVE MAX' ? <span className="soa-warn">ABOVE MAX</span> : <span className="soa-ok">OK</span>}</td>
+                    <td style={{ color: (line.marginPercent || 0) < 0.25 ? 'var(--danger)' : 'var(--success)' }}>{fmt.pct(line.marginPercent)}</td>
+                    <td>{fmt.eur(line.commissionAmount)}</td>
+                    <td>{fmt.eur(line.lineRevenue)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* SOA warnings */}
+          {computedLines.some(l => l.soaCheck === 'ABOVE MAX') && (
+            <div style={{ marginTop: 16, background: 'var(--danger-light)', padding: '12px 16px', borderRadius: 8, fontSize: 13, color: 'var(--danger)' }}>
+              <strong>Warning:</strong> One or more product lines exceed the maximum SOA. HQ review required.
+            </div>
+          )}
+
+          <div style={{ marginTop: 24, display: 'flex', justifyContent: 'space-between' }}>
+            <button className="btn btn-outline" onClick={() => setStep(2)}>Back: Edit Products</button>
+            <button className="btn btn-success" onClick={() => { setStep(4); handleSubmit(); }}>
+              Submit Deal as Draft
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Step 4: Submitted */}
+      {step === 4 && (
+        <div className="card" style={{ textAlign: 'center', padding: 48 }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>&#10003;</div>
+          <h2 style={{ marginBottom: 8 }}>Deal Submitted</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 24 }}>
+            Your deal has been saved as a Draft and is pending HQ approval.
+          </p>
+          <div className="btn-group" style={{ justifyContent: 'center' }}>
+            <button className="btn btn-primary" onClick={onComplete}>View My Deals</button>
+            <button className="btn btn-outline" onClick={() => { setStep(1); setLines([]); setDealInfo({ country: config.countries[0] || '', retailer: '', periodStart: '', periodEnd: '', notes: '' }); }}>
+              Create Another Deal
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   My Deals Page
+   ═══════════════════════════════════════════════ */
+function MyDealsPage({ deals, dealLines, user, products, isHQ }) {
+  const [expandedDeal, setExpandedDeal] = useState(null);
+  const myDeals = deals.filter(d => d.agent === user.displayName);
+
+  return (
+    <div>
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">My Deals</div>
+            <div className="card-subtitle">{myDeals.length} deals</div>
+          </div>
+        </div>
+        {myDeals.length === 0 ? (
+          <div className="empty-state">
+            <h3>No deals yet</h3>
+            <p>Create your first deal to start tracking.</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Deal ID</th><th>Retailer</th><th>Period</th>
+                  <th>Status</th><th>SOA</th><th>Commission</th><th>Revenue</th><th>Margin</th><th></th>
+                </tr>
+              </thead>
+              <tbody>
+                {myDeals.map(d => (
+                  <React.Fragment key={d.id}>
+                    <tr onClick={() => setExpandedDeal(expandedDeal === d.id ? null : d.id)} style={{ cursor: 'pointer' }}>
+                      <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{d.id}</td>
+                      <td>{d.retailer}</td>
+                      <td style={{ fontSize: 12 }}>{fmt.date(d.periodStart)} — {fmt.date(d.periodEnd)}</td>
+                      <td><StatusBadge status={d.status} /></td>
+                      <td>{fmt.eur(d.totalSOA)}</td>
+                      <td>{fmt.eur(d.totalCommission)}</td>
+                      <td>{fmt.eur(d.totalRevenue)}</td>
+                      <td>{fmt.pct(d.avgMargin)}</td>
+                      <td style={{ fontSize: 16 }}>{expandedDeal === d.id ? '▲' : '▼'}</td>
+                    </tr>
+                    {expandedDeal === d.id && (
+                      <tr>
+                        <td colSpan={9} style={{ padding: 0, background: '#f8fafc' }}>
+                          <DealDetail deal={d} lines={dealLines[d.id] || []} products={products} isHQ={isHQ} />
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   All Deals Page (HQ)
+   ═══════════════════════════════════════════════ */
+function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
+  const [expandedDeal, setExpandedDeal] = useState(null);
+  const [filterStatus, setFilterStatus] = useState('');
+  const [filterAgent, setFilterAgent] = useState('');
+  const [filterRetailer, setFilterRetailer] = useState('');
+  const [showRejectModal, setShowRejectModal] = useState(null);
+  const [rejectReason, setRejectReason] = useState('');
+
+  const agents = [...new Set(deals.map(d => d.agent))];
+  const retailers = [...new Set(deals.map(d => d.retailer))];
+
+  const filtered = deals.filter(d => {
+    if (filterStatus && d.status !== filterStatus) return false;
+    if (filterAgent && d.agent !== filterAgent) return false;
+    if (filterRetailer && d.retailer !== filterRetailer) return false;
+    return true;
+  });
+
+  function handleApprove(dealId) {
+    onStatusChange(dealId, CONFIG.STATUS.APPROVED);
+  }
+
+  function handleReject() {
+    if (showRejectModal) {
+      onStatusChange(showRejectModal, CONFIG.STATUS.REJECTED, rejectReason);
+      setShowRejectModal(null);
+      setRejectReason('');
+    }
+  }
+
+  function handleStatusChange(dealId, newStatus) {
+    onStatusChange(dealId, newStatus);
+  }
+
+  function exportAll() {
+    const rows = filtered.map(d => ({
+      'Deal ID': d.id, Agent: d.agent, Country: d.country, Retailer: d.retailer,
+      'Period Start': d.periodStart, 'Period End': d.periodEnd, Status: d.status,
+      'SOA (€)': (d.totalSOA || 0).toFixed(2), 'Commission (€)': (d.totalCommission || 0).toFixed(2),
+      'Revenue (€)': (d.totalRevenue || 0).toFixed(2), 'Margin %': ((d.avgMargin || 0) * 100).toFixed(1) + '%',
+      Created: d.createdDate, 'Approved By': d.approvedBy || '', Notes: d.notes || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'All Deals');
+    XLSX.writeFile(wb, `all-deals-${new Date().toISOString().split('T')[0]}.xlsx`);
+  }
+
+  return (
+    <div>
+      {/* Filters */}
+      <div className="filter-bar">
+        <div className="form-group">
+          <label>Status</label>
+          <select className="form-select" value={filterStatus} onChange={e => setFilterStatus(e.target.value)}>
+            <option value="">All</option>
+            {Object.values(CONFIG.STATUS).map(s => <option key={s}>{s}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Agent</label>
+          <select className="form-select" value={filterAgent} onChange={e => setFilterAgent(e.target.value)}>
+            <option value="">All</option>
+            {agents.map(a => <option key={a}>{a}</option>)}
+          </select>
+        </div>
+        <div className="form-group">
+          <label>Retailer</label>
+          <select className="form-select" value={filterRetailer} onChange={e => setFilterRetailer(e.target.value)}>
+            <option value="">All</option>
+            {retailers.map(r => <option key={r}>{r}</option>)}
+          </select>
+        </div>
+        <div className="form-group" style={{ marginLeft: 'auto' }}>
+          <label>&nbsp;</label>
+          <button className="btn btn-outline" onClick={exportAll}>Export to Excel</button>
+        </div>
+      </div>
+
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">All Deals</div>
+            <div className="card-subtitle">{filtered.length} deals</div>
+          </div>
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Deal ID</th><th>Agent</th><th>Country</th><th>Retailer</th><th>Period</th>
+                <th>Status</th><th>SOA</th><th>Commission</th><th>Revenue</th><th>Margin</th><th>Actions</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(d => (
+                <React.Fragment key={d.id}>
+                  <tr>
+                    <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{d.id}</td>
+                    <td>{d.agent}</td>
+                    <td>{d.country}</td>
+                    <td>{d.retailer}</td>
+                    <td style={{ fontSize: 12 }}>{fmt.date(d.periodStart)} — {fmt.date(d.periodEnd)}</td>
+                    <td><StatusBadge status={d.status} /></td>
+                    <td>{fmt.eur(d.totalSOA)}</td>
+                    <td>{fmt.eur(d.totalCommission)}</td>
+                    <td>{fmt.eur(d.totalRevenue)}</td>
+                    <td style={{ color: (d.avgMargin || 0) < 0.25 ? 'var(--danger)' : 'inherit' }}>{fmt.pct(d.avgMargin)}</td>
+                    <td>
+                      <div className="btn-group">
+                        {d.status === CONFIG.STATUS.DRAFT && (
+                          <>
+                            <button className="btn btn-success btn-sm" onClick={() => handleApprove(d.id)}>Approve</button>
+                            <button className="btn btn-danger btn-sm" onClick={() => setShowRejectModal(d.id)}>Reject</button>
+                          </>
+                        )}
+                        {d.status === CONFIG.STATUS.APPROVED && (
+                          <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange(d.id, CONFIG.STATUS.LIVE)}>Mark Live</button>
+                        )}
+                        {d.status === CONFIG.STATUS.LIVE && (
+                          <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange(d.id, CONFIG.STATUS.COMPLETED)}>Complete</button>
+                        )}
+                      </div>
+                    </td>
+                    <td>
+                      <button className="btn btn-sm btn-outline" onClick={() => setExpandedDeal(expandedDeal === d.id ? null : d.id)}>
+                        {expandedDeal === d.id ? '▲' : '▼'}
+                      </button>
+                    </td>
+                  </tr>
+                  {expandedDeal === d.id && (
+                    <tr>
+                      <td colSpan={12} style={{ padding: 0, background: '#f8fafc' }}>
+                        <DealDetail deal={d} lines={dealLines[d.id] || []} products={products} isHQ={true} />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* Reject Modal */}
+      {showRejectModal && (
+        <div className="modal-overlay" onClick={() => setShowRejectModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Reject Deal</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: 14 }}>
+              Please provide a reason for rejecting deal {showRejectModal}.
+            </p>
+            <div className="form-group">
+              <label>Reason</label>
+              <textarea className="form-input" value={rejectReason} onChange={e => setRejectReason(e.target.value)}
+                placeholder="e.g., Margins too low, SOA exceeds budget..." autoFocus />
+            </div>
+            <div className="btn-group" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline" onClick={() => setShowRejectModal(null)}>Cancel</button>
+              <button className="btn btn-danger" onClick={handleReject} disabled={!rejectReason.trim()}>Reject Deal</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   Deal Detail (expanded row)
+   ═══════════════════════════════════════════════ */
+function DealDetail({ deal, lines, products, isHQ }) {
+  const computedLines = lines.map(line => {
+    const product = products.find(p => p.sku === line.sku);
+    return Calculator.computeLine(line, product);
+  });
+
+  return (
+    <div style={{ padding: '16px 24px' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16, fontSize: 13 }}>
+        <div><strong>Created:</strong> {fmt.date(deal.createdDate)}</div>
+        <div><strong>Approved By:</strong> {deal.approvedBy || '—'}</div>
+        <div><strong>Approval Date:</strong> {deal.approvalDate ? fmt.date(deal.approvalDate) : '—'}</div>
+        {deal.notes && <div style={{ gridColumn: '1/4' }}><strong>Notes:</strong> {deal.notes}</div>}
+      </div>
+      <table style={{ fontSize: 12 }}>
+        <thead>
+          <tr>
+            <th>SKU</th><th>Product</th>
+            {isHQ && <th>Landed Cost</th>}
+            <th>List Price</th><th>Sold Price</th><th>Qty</th>
+            <th>SOA</th><th>SOA Check</th>
+            {isHQ && <th>Margin/Unit</th>}
+            <th>Margin %</th><th>Comm Rate</th><th>Commission</th><th>Revenue</th>
+          </tr>
+        </thead>
+        <tbody>
+          {computedLines.map((line, i) => {
+            const product = products.find(p => p.sku === line.sku);
+            return (
+              <tr key={i}>
+                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{line.sku}</td>
+                <td>{line.productName || product?.name}</td>
+                {isHQ && <td>{fmt.eur(product?.landedCost)}</td>}
+                <td>{fmt.eur(product?.listPrice)}</td>
+                <td>{fmt.eur(line.soldPrice)}</td>
+                <td>{fmt.num(line.quantity)}</td>
+                <td>{fmt.eur(line.actualSOA)}</td>
+                <td>{line.soaCheck === 'ABOVE MAX' ? <span className="soa-warn">ABOVE MAX</span> : <span className="soa-ok">OK</span>}</td>
+                {isHQ && <td>{fmt.eur(line.marginPerUnit)}</td>}
+                <td style={{ color: (line.marginPercent || 0) < 0.25 ? 'var(--danger)' : 'var(--success)' }}>{fmt.pct(line.marginPercent)}</td>
+                <td>{fmt.pct(line.commissionRate)}</td>
+                <td>{fmt.eur(line.commissionAmount)}</td>
+                <td>{fmt.eur(line.lineRevenue)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   Products Page
+   ═══════════════════════════════════════════════ */
+function ProductsPage({ products, isHQ }) {
+  const [search, setSearch] = useState('');
+
+  const filtered = products.filter(p =>
+    p.name.toLowerCase().includes(search.toLowerCase()) ||
+    p.sku.toLowerCase().includes(search.toLowerCase())
+  );
+
+  function exportProducts() {
+    const rows = filtered.map(p => {
+      const row = { SKU: p.sku, 'Product Name': p.name, 'List Price (€)': p.listPrice.toFixed(2), 'Max SOA (€)': p.maxSOA.toFixed(2), 'Default Net Price (€)': p.defaultNetPrice.toFixed(2) };
+      if (isHQ) row['Landed Cost (€)'] = p.landedCost.toFixed(2);
+      return row;
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Products');
+    XLSX.writeFile(wb, 'hombli-products.xlsx');
+  }
+
+  return (
+    <div>
+      <div className="card">
+        <div className="card-header">
+          <div>
+            <div className="card-title">Product Catalog</div>
+            <div className="card-subtitle">{products.length} products · {isHQ ? 'Full view' : 'Agent view (Landed Cost hidden)'}</div>
+          </div>
+          <button className="btn btn-outline btn-sm" onClick={exportProducts}>Export</button>
+        </div>
+        <div className="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+          </svg>
+          <input placeholder="Search by name or SKU..." value={search} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th><th>Product Name</th>
+                {isHQ && <th>Landed Cost</th>}
+                <th>List Price</th><th>Max SOA</th><th>Default Net Price</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map(p => (
+                <tr key={p.sku}>
+                  <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{p.sku}</td>
+                  <td>{p.name}</td>
+                  {isHQ && <td>{fmt.eur(p.landedCost)}</td>}
+                  <td>{fmt.eur(p.listPrice)}</td>
+                  <td>{fmt.eur(p.maxSOA)}</td>
+                  <td>{fmt.eur(p.defaultNetPrice)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {filtered.length === 0 && (
+          <div className="empty-state">
+            <h3>No products found</h3>
+            <p>Try a different search term.</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════════════
+   Status Badge Component
+   ═══════════════════════════════════════════════ */
+function StatusBadge({ status }) {
+  const cls = {
+    Draft: 'badge-draft',
+    Approved: 'badge-approved',
+    Live: 'badge-live',
+    Completed: 'badge-completed',
+    Rejected: 'badge-rejected',
+  }[status] || 'badge-draft';
+
+  return <span className={`badge ${cls}`}>{status}</span>;
+}
+
+
+/* ── Mount ── */
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>
