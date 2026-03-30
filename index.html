@@ -16,6 +16,9 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <!-- SheetJS for Excel export -->
 <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+<!-- jsPDF for Sales Policy PDF generation -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
 <style>
 /* ── Variables ── */
@@ -172,6 +175,10 @@ tr:last-child td { border-bottom: none; }
 .badge-live { background: var(--success-light); color: var(--success); }
 .badge-completed { background: #f1f5f9; color: #334155; }
 .badge-rejected { background: var(--danger-light); color: var(--danger); }
+.badge-claim-received { background: #fef3c7; color: #d97706; }
+.badge-settled { background: #052e16; color: #4ade80; }
+.badge-overdue { background: var(--danger); color: #fff; animation: pulse 2s infinite; }
+@keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
 /* ── Buttons ── */
 .btn {
@@ -285,6 +292,46 @@ textarea.form-input { min-height: 80px; resize: vertical; font-family: inherit; 
 .spinner { display: inline-block; width: 24px; height: 24px; border: 3px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.6s linear infinite; margin-bottom: 8px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ── Claim Form (public) ── */
+.claim-page {
+  min-height: 100vh; background: var(--bg);
+  display: flex; align-items: flex-start; justify-content: center; padding: 40px 16px;
+}
+.claim-container {
+  background: var(--surface); border-radius: var(--radius-lg); box-shadow: var(--shadow-lg);
+  max-width: 720px; width: 100%; padding: 40px; border: 1px solid var(--border);
+}
+.claim-container h1 { font-size: 22px; margin-bottom: 4px; }
+.claim-container .subtitle { color: var(--text-secondary); font-size: 14px; margin-bottom: 24px; }
+.claim-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; font-size: 13px; }
+.claim-info-grid .label { color: var(--text-secondary); font-size: 11px; text-transform: uppercase; font-weight: 600; }
+.claim-deadline-banner {
+  padding: 12px 16px; border-radius: var(--radius); margin-bottom: 24px; font-size: 13px; font-weight: 600;
+}
+.claim-deadline-banner.ok { background: var(--success-light); color: var(--success); }
+.claim-deadline-banner.warn { background: var(--warning-light); color: var(--warning); }
+.claim-deadline-banner.expired { background: var(--danger-light); color: var(--danger); }
+.claim-qty-input {
+  width: 80px; padding: 6px 8px; border: 1px solid var(--border); border-radius: 4px;
+  font-size: 13px; text-align: right;
+}
+.claim-qty-input:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
+.claim-success { text-align: center; padding: 40px 0; }
+.claim-success h2 { color: var(--success); margin-bottom: 8px; }
+
+/* ── Variance indicators ── */
+.variance-pos { color: var(--success); }
+.variance-neg { color: var(--danger); }
+.variance-zero { color: var(--text-secondary); }
+
+/* ── Claim link display ── */
+.claim-link-box {
+  display: flex; align-items: center; gap: 8px; background: var(--bg);
+  border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px;
+  font-size: 12px; font-family: monospace; word-break: break-all;
+}
+.claim-link-box button { flex-shrink: 0; }
+
 /* ── Responsive ── */
 @media (max-width: 768px) {
   .header { padding: 0 12px; }
@@ -318,8 +365,8 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 /* ── Configuration ── */
 const CONFIG = {
   // Google Sheets published CSV URLs
-  PUB_BASE: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTb8BxCi32ulunJoODNSLghRqAkQMA57i7xfglnQRtEvLJjB_xqJvUN5peoDolt3gMT4fkBwtu_H6uq/pub',
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbxX7L18pp0EKYD9lmM_GSMhMweLexwzxFn4qjgF1NqGZLITAQjjlHcWgfNaOkqmdFiN_w/exec',
+  PUB_BASE: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSYTecrReiEd2-dQUoAie9nKkEsIxtYAwtiVWPhrO94fB_gHzVNDOiG8DdhulaUCEstDiM_eZKrIr5z/pub',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbw30ii1HpNsZAIeep_Aeio4y6CLzANg15ANh5VnY4aP9VqWA8G3_XG-DC8t-ItxWn9G/exec',
 
   // CSV URL for a given tab GID
   getSheetUrl(gid) {
@@ -327,12 +374,12 @@ const CONFIG = {
   },
 
   // Tab GIDs
-  GID_PRODUCTS: '2097381963',
-  GID_DEALS: '787009807',
-  GID_DEALLINES: '1860512594',
-  GID_USERS: '1030849883',
-  GID_AUDITLOG: '378152385',
-  GID_CONFIG: '1512401125',
+  GID_PRODUCTS: '409776162',
+  GID_DEALS: '997655379',
+  GID_DEALLINES: '1769475783',
+  GID_USERS: '126983221',
+  GID_AUDITLOG: '1744002527',
+  GID_CONFIG: '1438060884',
 
   // Commission tiers
   COMMISSION_TIERS: [
@@ -348,7 +395,12 @@ const CONFIG = {
     LIVE: 'Live',
     COMPLETED: 'Completed',
     REJECTED: 'Rejected',
+    CLAIM_RECEIVED: 'Claim Received',
+    SETTLED: 'Settled',
   },
+
+  CLAIM_DEADLINE_WEEKS: 12,
+  CLAIM_BASE_URL: 'https://omaravanca.github.io/deal-framework/',
 };
 
 /* ── Calculator Engine ── */
@@ -534,6 +586,21 @@ function generateDemoDeals() {
       approvedBy: '', approvalDate: '', notes: '',
       totalSOA: 900, totalCommission: 620, totalRevenue: 14200, avgMargin: 0.31,
     },
+    {
+      id: 'D-260301-F6U', agent: 'Anna Weber', country: 'Switzerland', retailer: 'Brack.ch',
+      periodStart: '2026-01-01', periodEnd: '2026-03-15', status: 'Completed', createdDate: '2026-01-02',
+      approvedBy: 'HQ Admin', approvalDate: '2026-01-05', notes: 'Q1 winter campaign',
+      totalSOA: 1800, totalCommission: 960, totalRevenue: 22000, avgMargin: 0.33,
+      claimDeadline: '2026-06-07',
+    },
+    {
+      id: 'D-260215-G7T', agent: 'Marco Rossi', country: 'Switzerland', retailer: 'Digitec Galaxus',
+      periodStart: '2025-11-01', periodEnd: '2025-12-31', status: 'Claim Received', createdDate: '2025-10-20',
+      approvedBy: 'HQ Admin', approvalDate: '2025-10-25', notes: 'Black Friday / Holiday season',
+      totalSOA: 3200, totalCommission: 1850, totalRevenue: 45000, avgMargin: 0.34,
+      claimDeadline: '2026-03-25', claimReceivedDate: '2026-03-10',
+      actualSOA: 2900, actualCommission: 1680, actualRevenue: 41200,
+    },
   ];
   return deals;
 }
@@ -561,6 +628,14 @@ function generateDemoDealLines() {
     'D-260328-E5V': [
       { dealId: 'D-260328-E5V', sku: 'HBSW-0800', soldPrice: 21.99, quantity: 250 },
       { dealId: 'D-260328-E5V', sku: 'HBSD-0900', soldPrice: 34.99, quantity: 150 },
+    ],
+    'D-260301-F6U': [
+      { dealId: 'D-260301-F6U', sku: 'HBSC-0300', soldPrice: 34.99, quantity: 300 },
+      { dealId: 'D-260301-F6U', sku: 'HBSL-0401', soldPrice: 34.99, quantity: 200 },
+    ],
+    'D-260215-G7T': [
+      { dealId: 'D-260215-G7T', sku: 'HBSH-0600', soldPrice: 109.99, quantity: 150, actualQuantity: 135, actualSOA: 2700, actualCommission: 1520, actualRevenue: 14848.65 },
+      { dealId: 'D-260215-G7T', sku: 'HBSC-0301', soldPrice: 59.99, quantity: 250, actualQuantity: 220, actualSOA: 2200, actualCommission: 1100, actualRevenue: 13197.80 },
     ],
   };
 }
@@ -735,13 +810,20 @@ function App() {
     setDeals(prev => {
       const next = prev.map(d => {
         if (d.id !== dealId) return d;
-        return {
+        const updates = {
           ...d,
           status: newStatus,
           approvedBy: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? user.displayName : d.approvedBy,
           approvalDate: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? new Date().toISOString().split('T')[0] : d.approvalDate,
           notes: reason || d.notes,
         };
+        // Calculate claim deadline on approval
+        if (newStatus === CONFIG.STATUS.APPROVED && d.periodEnd) {
+          const deadline = new Date(d.periodEnd);
+          deadline.setDate(deadline.getDate() + CONFIG.CLAIM_DEADLINE_WEEKS * 7);
+          updates.claimDeadline = deadline.toISOString().split('T')[0];
+        }
+        return updates;
       });
       saveLocal('deals', next);
       return next;
@@ -753,6 +835,37 @@ function App() {
       writeAuditLog(dealId, 'status_change', user.displayName, deal ? deal.status : '', newStatus, reason);
       writeDealStatusToSheet(dealId, newStatus, user.displayName, reason);
     }
+  }
+
+  function settleDeal(dealId, notes = '') {
+    setDeals(prev => {
+      const next = prev.map(d => {
+        if (d.id !== dealId) return d;
+        return {
+          ...d,
+          status: CONFIG.STATUS.SETTLED,
+          settlementDate: new Date().toISOString().split('T')[0],
+          settlementNotes: notes,
+        };
+      });
+      saveLocal('deals', next);
+      return next;
+    });
+    showToast('Deal settled', 'success');
+    if (CONFIG.APPS_SCRIPT_URL) {
+      writeSettleDeal(dealId, notes);
+    }
+  }
+
+  async function writeSettleDeal(dealId, notes) {
+    try {
+      await fetch(CONFIG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'settleDeal', dealId, notes, user: user.displayName }),
+      });
+    } catch(e) { console.error('Settle write failed:', e); }
   }
 
   async function writeDealToSheet(deal, lines) {
@@ -841,7 +954,7 @@ function App() {
         {page === 'dashboard' && <DashboardPage deals={computedDeals} dealLines={computedDealLines} user={user} isHQ={isHQ} setPage={setPage} />}
         {page === 'newdeal' && <NewDealPage products={products} config={config} user={user} onSubmit={addDeal} onComplete={() => setPage('mydeals')} isHQ={isHQ} />}
         {page === 'mydeals' && <MyDealsPage deals={computedDeals} dealLines={computedDealLines} user={user} products={products} isHQ={isHQ} />}
-        {page === 'alldeals' && isHQ && <AllDealsPage deals={computedDeals} dealLines={computedDealLines} user={user} products={products} onStatusChange={updateDealStatus} />}
+        {page === 'alldeals' && isHQ && <AllDealsPage deals={computedDeals} dealLines={computedDealLines} user={user} products={products} onStatusChange={updateDealStatus} onSettle={settleDeal} />}
         {page === 'products' && <ProductsPage products={products} isHQ={isHQ} />}
       </div>
 
@@ -910,7 +1023,7 @@ function DashboardPage({ deals, dealLines, user, isHQ, setPage }) {
   const chartInstances = useRef({});
 
   const visibleDeals = isHQ ? deals : deals.filter(d => d.agent === user.displayName);
-  const activeDeals = visibleDeals.filter(d => ['Draft', 'Approved', 'Live'].includes(d.status));
+  const activeDeals = visibleDeals.filter(d => ['Draft', 'Approved', 'Live', 'Completed', 'Claim Received'].includes(d.status));
   const totalSOA = activeDeals.reduce((s, d) => s + (d.totalSOA || 0), 0);
   const totalCommission = activeDeals.reduce((s, d) => s + (d.totalCommission || 0), 0);
   const totalRevenue = activeDeals.reduce((s, d) => s + (d.totalRevenue || 0), 0);
@@ -972,7 +1085,7 @@ function DashboardPage({ deals, dealLines, user, isHQ, setPage }) {
     if (chartRef3.current) {
       const byStatus = {};
       filteredDeals.forEach(d => { byStatus[d.status] = (byStatus[d.status] || 0) + 1; });
-      const statusColors = { Draft: '#94a3b8', Approved: '#3b82f6', Live: '#22c55e', Completed: '#334155', Rejected: '#ef4444' };
+      const statusColors = { Draft: '#94a3b8', Approved: '#3b82f6', Live: '#22c55e', Completed: '#334155', Rejected: '#ef4444', 'Claim Received': '#f59e0b', Settled: '#065f46' };
       chartInstances.current.c3 = new Chart(chartRef3.current, {
         type: 'doughnut',
         data: {
@@ -1073,6 +1186,37 @@ function DashboardPage({ deals, dealLines, user, isHQ, setPage }) {
         </div>
       </div>
 
+      {/* Claim KPIs (HQ only) */}
+      {isHQ && (() => {
+        const completedDeals = visibleDeals.filter(d => d.status === 'Completed');
+        const pendingClaims = completedDeals.filter(d => !isDealOverdue(d));
+        const overdueClaims = completedDeals.filter(d => isDealOverdue(d));
+        const claimReceivedDeals = visibleDeals.filter(d => d.status === 'Claim Received');
+        const settledDeals = visibleDeals.filter(d => d.status === 'Settled');
+        const plannedSOAAll = [...claimReceivedDeals, ...settledDeals].reduce((s, d) => s + (d.totalSOA || 0), 0);
+        const actualSOAAll = [...claimReceivedDeals, ...settledDeals].reduce((s, d) => s + (d.actualSOA || 0), 0);
+        const claimRatio = plannedSOAAll > 0 ? (actualSOAAll / plannedSOAAll * 100).toFixed(1) : '—';
+        return (
+          <div className="kpi-grid" style={{ marginTop: 0 }}>
+            <div className="kpi-card warning">
+              <div className="kpi-label">Pending Claims</div>
+              <div className="kpi-value">{pendingClaims.length}</div>
+              <div className="kpi-sub">Completed, awaiting retailer claim</div>
+            </div>
+            <div className="kpi-card danger">
+              <div className="kpi-label">Overdue Claims</div>
+              <div className="kpi-value">{overdueClaims.length}</div>
+              <div className="kpi-sub">Past 12-week deadline</div>
+            </div>
+            <div className="kpi-card" style={{ borderLeft: '4px solid var(--info)' }}>
+              <div className="kpi-label">Claimed vs Planned SOA</div>
+              <div className="kpi-value" style={{ color: 'var(--info)' }}>{claimRatio}{claimRatio !== '—' ? '%' : ''}</div>
+              <div className="kpi-sub">{fmt.eur(actualSOAAll)} of {fmt.eur(plannedSOAAll)}</div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Filters */}
       <div className="filter-bar">
         {isHQ && (
@@ -1152,6 +1296,52 @@ function DashboardPage({ deals, dealLines, user, isHQ, setPage }) {
         </div>
       )}
 
+      {/* Claim Deadline Tracker (HQ only) */}
+      {isHQ && (() => {
+        const trackableDeals = visibleDeals.filter(d =>
+          ['Approved', 'Live', 'Completed'].includes(d.status) && (d.claimDeadline || d.periodEnd)
+        ).map(d => {
+          const days = daysUntilDeadline(d);
+          return { ...d, _daysLeft: days };
+        }).sort((a, b) => (a._daysLeft || 999) - (b._daysLeft || 999));
+
+        if (trackableDeals.length === 0) return null;
+        return (
+          <div className="card">
+            <div className="card-header">
+              <div>
+                <div className="card-title">Claim Deadlines</div>
+                <div className="card-subtitle">Upcoming claim deadlines — most urgent first</div>
+              </div>
+            </div>
+            <div className="table-wrap">
+              <table>
+                <thead>
+                  <tr><th>Deal ID</th><th>Retailer</th><th>Agent</th><th>Period End</th><th>Claim Deadline</th><th>Days Left</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                  {trackableDeals.slice(0, 15).map(d => {
+                    const days = d._daysLeft;
+                    const color = days === null ? 'inherit' : days < 0 ? 'var(--danger)' : days <= 7 ? 'var(--danger)' : days <= 30 ? 'var(--warning)' : 'var(--success)';
+                    return (
+                      <tr key={d.id}>
+                        <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{d.id}</td>
+                        <td>{d.retailer}</td>
+                        <td>{d.agent}</td>
+                        <td style={{ fontSize: 12 }}>{fmt.date(d.periodEnd)}</td>
+                        <td style={{ fontSize: 12 }}>{fmt.date(getClaimDeadline(d))}</td>
+                        <td style={{ fontWeight: 700, color }}>{days !== null ? (days < 0 ? days + ' (overdue)' : days + 'd') : '—'}</td>
+                        <td><StatusBadge status={d.status} overdue={d.status === 'Completed' && days !== null && days < 0} /></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Recent Deals */}
       <div className="card">
         <div className="card-header">
@@ -1176,7 +1366,7 @@ function DashboardPage({ deals, dealLines, user, isHQ, setPage }) {
                   <td>{d.agent}</td>
                   <td>{d.retailer}</td>
                   <td style={{ fontSize: 12 }}>{fmt.date(d.periodStart)} — {fmt.date(d.periodEnd)}</td>
-                  <td><StatusBadge status={d.status} /></td>
+                  <td><StatusBadge status={d.status} overdue={isDealOverdue(d)} /></td>
                   <td>{fmt.eur(d.totalSOA)}</td>
                   <td>{fmt.eur(d.totalCommission)}</td>
                   <td>{fmt.eur(d.totalRevenue)}</td>
@@ -1587,32 +1777,45 @@ function MyDealsPage({ deals, dealLines, user, products, isHQ }) {
               <thead>
                 <tr>
                   <th>Deal ID</th><th>Retailer</th><th>Period</th>
-                  <th>Status</th><th>SOA</th><th>Commission</th><th>Revenue</th><th>Margin</th><th></th>
+                  <th>Status</th><th>SOA</th><th>Commission</th><th>Revenue</th><th>Margin</th><th>Claim Deadline</th><th></th>
                 </tr>
               </thead>
               <tbody>
-                {myDeals.map(d => (
+                {myDeals.map(d => {
+                  const overdue = isDealOverdue(d);
+                  const days = daysUntilDeadline(d);
+                  const showDeadline = ['Approved', 'Live', 'Completed'].includes(d.status) && (d.claimDeadline || d.periodEnd);
+                  return (
                   <React.Fragment key={d.id}>
                     <tr onClick={() => setExpandedDeal(expandedDeal === d.id ? null : d.id)} style={{ cursor: 'pointer' }}>
                       <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{d.id}</td>
                       <td>{d.retailer}</td>
                       <td style={{ fontSize: 12 }}>{fmt.date(d.periodStart)} — {fmt.date(d.periodEnd)}</td>
-                      <td><StatusBadge status={d.status} /></td>
+                      <td><StatusBadge status={d.status} overdue={overdue} /></td>
                       <td>{fmt.eur(d.totalSOA)}</td>
                       <td>{fmt.eur(d.totalCommission)}</td>
                       <td>{fmt.eur(d.totalRevenue)}</td>
                       <td>{fmt.pct(d.avgMargin)}</td>
+                      <td style={{ fontSize: 12 }}>
+                        {showDeadline ? (
+                          <span style={{ color: days !== null && days < 7 ? 'var(--danger)' : days !== null && days < 30 ? 'var(--warning)' : 'inherit' }}>
+                            {fmt.date(getClaimDeadline(d))}
+                            {days !== null && <span style={{ fontSize: 11, marginLeft: 4 }}>({days < 0 ? 'overdue' : days + 'd'})</span>}
+                          </span>
+                        ) : '—'}
+                      </td>
                       <td style={{ fontSize: 16 }}>{expandedDeal === d.id ? '▲' : '▼'}</td>
                     </tr>
                     {expandedDeal === d.id && (
                       <tr>
-                        <td colSpan={9} style={{ padding: 0, background: '#f8fafc' }}>
+                        <td colSpan={10} style={{ padding: 0, background: '#f8fafc' }}>
                           <DealDetail deal={d} lines={dealLines[d.id] || []} products={products} isHQ={isHQ} />
                         </td>
                       </tr>
                     )}
                   </React.Fragment>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1626,13 +1829,15 @@ function MyDealsPage({ deals, dealLines, user, products, isHQ }) {
 /* ═══════════════════════════════════════════════
    All Deals Page (HQ)
    ═══════════════════════════════════════════════ */
-function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
+function AllDealsPage({ deals, dealLines, user, products, onStatusChange, onSettle }) {
   const [expandedDeal, setExpandedDeal] = useState(null);
   const [filterStatus, setFilterStatus] = useState('');
   const [filterAgent, setFilterAgent] = useState('');
   const [filterRetailer, setFilterRetailer] = useState('');
   const [showRejectModal, setShowRejectModal] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
+  const [showSettleModal, setShowSettleModal] = useState(null);
+  const [settleNotes, setSettleNotes] = useState('');
 
   const agents = [...new Set(deals.map(d => d.agent))];
   const retailers = [...new Set(deals.map(d => d.retailer))];
@@ -1658,6 +1863,14 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
 
   function handleStatusChange(dealId, newStatus) {
     onStatusChange(dealId, newStatus);
+  }
+
+  function handleSettle() {
+    if (showSettleModal) {
+      onSettle(showSettleModal, settleNotes);
+      setShowSettleModal(null);
+      setSettleNotes('');
+    }
   }
 
   function exportAll() {
@@ -1717,11 +1930,15 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
             <thead>
               <tr>
                 <th>Deal ID</th><th>Agent</th><th>Country</th><th>Retailer</th><th>Period</th>
-                <th>Status</th><th>SOA</th><th>Commission</th><th>Revenue</th><th>Margin</th><th>Actions</th><th></th>
+                <th>Status</th><th>SOA</th><th>Actual SOA</th><th>Commission</th><th>Revenue</th><th>Margin</th><th>Claim Deadline</th><th>Actions</th><th></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(d => (
+              {filtered.map(d => {
+                const overdue = isDealOverdue(d);
+                const days = daysUntilDeadline(d);
+                const hasActuals = d.status === 'Claim Received' || d.status === 'Settled';
+                return (
                 <React.Fragment key={d.id}>
                   <tr>
                     <td style={{ fontFamily: 'monospace', fontSize: 12 }}>{d.id}</td>
@@ -1729,11 +1946,19 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
                     <td>{d.country}</td>
                     <td>{d.retailer}</td>
                     <td style={{ fontSize: 12 }}>{fmt.date(d.periodStart)} — {fmt.date(d.periodEnd)}</td>
-                    <td><StatusBadge status={d.status} /></td>
+                    <td><StatusBadge status={d.status} overdue={overdue} /></td>
                     <td>{fmt.eur(d.totalSOA)}</td>
+                    <td>{hasActuals ? fmt.eur(d.actualSOA) : '—'}</td>
                     <td>{fmt.eur(d.totalCommission)}</td>
                     <td>{fmt.eur(d.totalRevenue)}</td>
                     <td style={{ color: (d.avgMargin || 0) < 0.25 ? 'var(--danger)' : 'inherit' }}>{fmt.pct(d.avgMargin)}</td>
+                    <td style={{ fontSize: 12 }}>
+                      {d.claimDeadline || d.periodEnd ? (
+                        <span style={{ color: days !== null && days < 7 ? 'var(--danger)' : days !== null && days < 30 ? 'var(--warning)' : 'inherit' }}>
+                          {fmt.date(getClaimDeadline(d))}
+                        </span>
+                      ) : '—'}
+                    </td>
                     <td>
                       <div className="btn-group">
                         {d.status === CONFIG.STATUS.DRAFT && (
@@ -1748,6 +1973,9 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
                         {d.status === CONFIG.STATUS.LIVE && (
                           <button className="btn btn-sm btn-outline" onClick={() => handleStatusChange(d.id, CONFIG.STATUS.COMPLETED)}>Complete</button>
                         )}
+                        {d.status === CONFIG.STATUS.CLAIM_RECEIVED && (
+                          <button className="btn btn-sm btn-success" onClick={() => setShowSettleModal(d.id)}>Settle</button>
+                        )}
                       </div>
                     </td>
                     <td>
@@ -1758,13 +1986,14 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
                   </tr>
                   {expandedDeal === d.id && (
                     <tr>
-                      <td colSpan={12} style={{ padding: 0, background: '#f8fafc' }}>
+                      <td colSpan={14} style={{ padding: 0, background: '#f8fafc' }}>
                         <DealDetail deal={d} lines={dealLines[d.id] || []} products={products} isHQ={true} />
                       </td>
                     </tr>
                   )}
                 </React.Fragment>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1790,6 +2019,27 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
           </div>
         </div>
       )}
+
+      {/* Settlement Modal */}
+      {showSettleModal && (
+        <div className="modal-overlay" onClick={() => setShowSettleModal(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()}>
+            <h3>Settle Deal</h3>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 16, fontSize: 14 }}>
+              Mark deal {showSettleModal} as settled. Add settlement notes (payment reference, adjustments, etc.).
+            </p>
+            <div className="form-group">
+              <label>Settlement Notes (optional)</label>
+              <textarea className="form-input" value={settleNotes} onChange={e => setSettleNotes(e.target.value)}
+                placeholder="e.g., Credit note #CN-2026-0042 issued, payment processed..." autoFocus />
+            </div>
+            <div className="btn-group" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn btn-outline" onClick={() => setShowSettleModal(null)}>Cancel</button>
+              <button className="btn btn-success" onClick={handleSettle}>Confirm Settlement</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1799,10 +2049,27 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange }) {
    Deal Detail (expanded row)
    ═══════════════════════════════════════════════ */
 function DealDetail({ deal, lines, products, isHQ }) {
+  const [copiedLink, setCopiedLink] = useState(false);
+
   const computedLines = lines.map(line => {
     const product = products.find(p => p.sku === line.sku);
     return Calculator.computeLine(line, product);
   });
+
+  const hasClaimData = deal.status === 'Claim Received' || deal.status === 'Settled';
+  const showPdfButton = ['Approved', 'Live', 'Completed', 'Claim Received', 'Settled'].includes(deal.status);
+  const claimUrl = getClaimUrl(deal.id);
+
+  function handleCopyLink() {
+    navigator.clipboard.writeText(claimUrl).then(() => {
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 2000);
+    });
+  }
+
+  function handleDownloadPdf() {
+    generateSalesPolicy(deal, lines, products);
+  }
 
   return (
     <div style={{ padding: '16px 24px' }}>
@@ -1810,42 +2077,136 @@ function DealDetail({ deal, lines, products, isHQ }) {
         <div><strong>Created:</strong> {fmt.date(deal.createdDate)}</div>
         <div><strong>Approved By:</strong> {deal.approvedBy || '—'}</div>
         <div><strong>Approval Date:</strong> {deal.approvalDate ? fmt.date(deal.approvalDate) : '—'}</div>
+        {deal.claimDeadline && <div><strong>Claim Deadline:</strong> {fmt.date(deal.claimDeadline)}</div>}
+        {deal.claimReceivedDate && <div><strong>Claim Received:</strong> {fmt.date(deal.claimReceivedDate)}</div>}
+        {deal.settlementDate && <div><strong>Settled:</strong> {fmt.date(deal.settlementDate)}</div>}
         {deal.notes && <div style={{ gridColumn: '1/4' }}><strong>Notes:</strong> {deal.notes}</div>}
+        {deal.settlementNotes && <div style={{ gridColumn: '1/4' }}><strong>Settlement Notes:</strong> {deal.settlementNotes}</div>}
       </div>
-      <table style={{ fontSize: 12 }}>
-        <thead>
-          <tr>
-            <th>SKU</th><th>Product</th>
-            {isHQ && <th>Landed Cost</th>}
-            <th>List Price</th><th>Sold Price</th><th>Qty</th>
-            <th>SOA</th><th>SOA Check</th>
-            {isHQ && <th>Margin/Unit</th>}
-            <th>Margin %</th><th>Comm Rate</th><th>Commission</th><th>Revenue</th>
-          </tr>
-        </thead>
-        <tbody>
-          {computedLines.map((line, i) => {
-            const product = products.find(p => p.sku === line.sku);
-            return (
-              <tr key={i}>
-                <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{line.sku}</td>
-                <td>{line.productName || product?.name}</td>
-                {isHQ && <td>{fmt.eur(product?.landedCost)}</td>}
-                <td>{fmt.eur(product?.listPrice)}</td>
-                <td>{fmt.eur(line.soldPrice)}</td>
-                <td>{fmt.num(line.quantity)}</td>
-                <td>{fmt.eur(line.actualSOA)}</td>
-                <td>{line.soaCheck === 'ABOVE MAX' ? <span className="soa-warn">ABOVE MAX</span> : <span className="soa-ok">OK</span>}</td>
-                {isHQ && <td>{fmt.eur(line.marginPerUnit)}</td>}
-                <td style={{ color: (line.marginPercent || 0) < 0.25 ? 'var(--danger)' : 'var(--success)' }}>{fmt.pct(line.marginPercent)}</td>
-                <td>{fmt.pct(line.commissionRate)}</td>
-                <td>{fmt.eur(line.commissionAmount)}</td>
-                <td>{fmt.eur(line.lineRevenue)}</td>
+
+      {/* Action buttons: PDF + Claim Link */}
+      {showPdfButton && (
+        <div style={{ display: 'flex', gap: 12, marginBottom: 16, flexWrap: 'wrap', alignItems: 'center' }}>
+          <button className="btn btn-primary btn-sm" onClick={handleDownloadPdf}>
+            Download Sales Policy PDF
+          </button>
+          <div className="claim-link-box" style={{ flex: 1, minWidth: 200 }}>
+            <span style={{ flex: 1 }}>{claimUrl}</span>
+            <button className="btn btn-outline btn-sm" onClick={handleCopyLink}>
+              {copiedLink ? 'Copied!' : 'Copy Link'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Planned vs Actual comparison (when claim data exists) */}
+      {hasClaimData && (
+        <div style={{ marginBottom: 16 }}>
+          <h4 style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, color: 'var(--text-secondary)', textTransform: 'uppercase', letterSpacing: 0.3 }}>Planned vs Actual</h4>
+          <div className="summary-box" style={{ marginBottom: 12 }}>
+            <div className="summary-item">
+              <label>Planned SOA</label>
+              <div className="val" style={{ fontSize: 16, color: 'var(--accent)' }}>{fmt.eur(deal.totalSOA)}</div>
+            </div>
+            <div className="summary-item">
+              <label>Actual SOA</label>
+              <div className="val" style={{ fontSize: 16, color: 'var(--accent)' }}>{fmt.eur(deal.actualSOA)}</div>
+            </div>
+            <div className="summary-item">
+              <label>SOA Variance</label>
+              <div className={'val ' + (deal.actualSOA >= deal.totalSOA ? 'variance-pos' : 'variance-neg')} style={{ fontSize: 16 }}>
+                {deal.totalSOA > 0 ? ((deal.actualSOA / deal.totalSOA * 100) - 100).toFixed(1) + '%' : '—'}
+              </div>
+            </div>
+            <div className="summary-item">
+              <label>Planned Commission</label>
+              <div className="val" style={{ fontSize: 16, color: 'var(--warning)' }}>{fmt.eur(deal.totalCommission)}</div>
+            </div>
+            <div className="summary-item">
+              <label>Actual Commission</label>
+              <div className="val" style={{ fontSize: 16, color: 'var(--warning)' }}>{fmt.eur(deal.actualCommission)}</div>
+            </div>
+            <div className="summary-item">
+              <label>Planned Revenue</label>
+              <div className="val" style={{ fontSize: 16, color: 'var(--success)' }}>{fmt.eur(deal.totalRevenue)}</div>
+            </div>
+            <div className="summary-item">
+              <label>Actual Revenue</label>
+              <div className="val" style={{ fontSize: 16, color: 'var(--success)' }}>{fmt.eur(deal.actualRevenue)}</div>
+            </div>
+          </div>
+          <table style={{ fontSize: 12 }}>
+            <thead>
+              <tr>
+                <th>Product</th><th>SKU</th><th>Planned Qty</th><th>Actual Qty</th>
+                <th>Planned SOA</th><th>Actual SOA</th><th>Variance</th>
               </tr>
-            );
-          })}
-        </tbody>
-      </table>
+            </thead>
+            <tbody>
+              {computedLines.map((line, i) => {
+                const actualQty = line.actualQuantity || 0;
+                const plannedQty = parseInt(line.quantity) || 0;
+                const product = products.find(p => p.sku === line.sku);
+                const soaPerUnit = (line.actualSOA || 0);
+                const plannedLineSoa = soaPerUnit * plannedQty;
+                const actualLineSoa = line.actualSOA && typeof lines[i]?.actualSOA !== 'undefined' ? lines[i].actualSOA : soaPerUnit * actualQty;
+                const qtyVariance = plannedQty > 0 ? ((actualQty / plannedQty * 100) - 100).toFixed(1) : '—';
+                return (
+                  <tr key={i}>
+                    <td>{line.productName || product?.name}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{line.sku}</td>
+                    <td>{fmt.num(plannedQty)}</td>
+                    <td>{fmt.num(actualQty)}</td>
+                    <td>{fmt.eur(soaPerUnit * plannedQty)}</td>
+                    <td>{fmt.eur(lines[i]?.actualSOA || 0)}</td>
+                    <td className={actualQty >= plannedQty ? 'variance-pos' : actualQty > 0 ? 'variance-neg' : 'variance-zero'}>
+                      {qtyVariance !== '—' ? qtyVariance + '%' : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* Standard line detail table */}
+      {!hasClaimData && (
+        <table style={{ fontSize: 12 }}>
+          <thead>
+            <tr>
+              <th>SKU</th><th>Product</th>
+              {isHQ && <th>Landed Cost</th>}
+              <th>List Price</th><th>Sold Price</th><th>Qty</th>
+              <th>SOA</th><th>SOA Check</th>
+              {isHQ && <th>Margin/Unit</th>}
+              <th>Margin %</th><th>Comm Rate</th><th>Commission</th><th>Revenue</th>
+            </tr>
+          </thead>
+          <tbody>
+            {computedLines.map((line, i) => {
+              const product = products.find(p => p.sku === line.sku);
+              return (
+                <tr key={i}>
+                  <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{line.sku}</td>
+                  <td>{line.productName || product?.name}</td>
+                  {isHQ && <td>{fmt.eur(product?.landedCost)}</td>}
+                  <td>{fmt.eur(product?.listPrice)}</td>
+                  <td>{fmt.eur(line.soldPrice)}</td>
+                  <td>{fmt.num(line.quantity)}</td>
+                  <td>{fmt.eur(line.actualSOA)}</td>
+                  <td>{line.soaCheck === 'ABOVE MAX' ? <span className="soa-warn">ABOVE MAX</span> : <span className="soa-ok">OK</span>}</td>
+                  {isHQ && <td>{fmt.eur(line.marginPerUnit)}</td>}
+                  <td style={{ color: (line.marginPercent || 0) < 0.25 ? 'var(--danger)' : 'var(--success)' }}>{fmt.pct(line.marginPercent)}</td>
+                  <td>{fmt.pct(line.commissionRate)}</td>
+                  <td>{fmt.eur(line.commissionAmount)}</td>
+                  <td>{fmt.eur(line.lineRevenue)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }
@@ -1928,21 +2289,416 @@ function ProductsPage({ products, isHQ }) {
 /* ═══════════════════════════════════════════════
    Status Badge Component
    ═══════════════════════════════════════════════ */
-function StatusBadge({ status }) {
+function StatusBadge({ status, overdue }) {
+  if (overdue) return <span className="badge badge-overdue">Overdue</span>;
   const cls = {
     Draft: 'badge-draft',
     Approved: 'badge-approved',
     Live: 'badge-live',
     Completed: 'badge-completed',
     Rejected: 'badge-rejected',
+    'Claim Received': 'badge-claim-received',
+    Settled: 'badge-settled',
   }[status] || 'badge-draft';
 
   return <span className={`badge ${cls}`}>{status}</span>;
 }
 
 
-/* ── Mount ── */
-ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+/* ═══════════════════════════════════════════════
+   Claim Helpers
+   ═══════════════════════════════════════════════ */
+function getClaimDeadline(deal) {
+  if (deal.claimDeadline) return new Date(deal.claimDeadline);
+  if (deal.periodEnd) {
+    const d = new Date(deal.periodEnd);
+    d.setDate(d.getDate() + CONFIG.CLAIM_DEADLINE_WEEKS * 7);
+    return d;
+  }
+  return null;
+}
+
+function isDealOverdue(deal) {
+  if (deal.status !== 'Completed') return false;
+  const deadline = getClaimDeadline(deal);
+  if (!deadline) return false;
+  return new Date() > deadline;
+}
+
+function daysUntilDeadline(deal) {
+  const deadline = getClaimDeadline(deal);
+  if (!deadline) return null;
+  const now = new Date();
+  return Math.ceil((deadline - now) / (1000 * 60 * 60 * 24));
+}
+
+function getClaimUrl(dealId) {
+  return CONFIG.CLAIM_BASE_URL + '?claim=' + dealId;
+}
+
+
+/* ═══════════════════════════════════════════════
+   Sales Policy PDF Generator
+   ═══════════════════════════════════════════════ */
+function generateSalesPolicy(deal, lines, products) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+
+  // Header
+  doc.setFontSize(10);
+  doc.setTextColor(100);
+  doc.text('AVANCA INTERNATIONAL B.V.', 14, 15);
+  doc.setFontSize(18);
+  doc.setTextColor(37, 99, 235);
+  doc.text('Sales Policy Notification', 14, 25);
+
+  // Deal reference box
+  doc.setFontSize(9);
+  doc.setTextColor(100);
+  doc.text('Deal Reference: ' + deal.id, 14, 34);
+  doc.text('Date: ' + new Date().toLocaleDateString('en-GB'), 14, 39);
+
+  // Divider
+  doc.setDrawColor(226, 232, 240);
+  doc.line(14, 43, 196, 43);
+
+  // Deal info
+  doc.setFontSize(11);
+  doc.setTextColor(15, 23, 42);
+  const infoY = 50;
+  doc.setFont(undefined, 'bold');
+  doc.text('Retailer:', 14, infoY);
+  doc.text('Country:', 14, infoY + 7);
+  doc.text('Agent:', 14, infoY + 14);
+  doc.text('Deal Period:', 14, infoY + 21);
+  doc.setFont(undefined, 'normal');
+  doc.text(deal.retailer || '', 55, infoY);
+  doc.text(deal.country || '', 55, infoY + 7);
+  doc.text(deal.agent || '', 55, infoY + 14);
+  doc.text((fmt.date(deal.periodStart) || '') + '  —  ' + (fmt.date(deal.periodEnd) || ''), 55, infoY + 21);
+
+  // Product table
+  const tableData = lines.map(line => {
+    const product = products.find(p => p.sku === line.sku) || {};
+    const soaPerUnit = Math.max(0, (product.listPrice || 0) - (parseFloat(line.soldPrice) || 0));
+    return [
+      line.productName || product.name || '',
+      line.sku,
+      String(parseInt(line.quantity) || 0),
+      fmt.eur(product.listPrice || 0),
+      fmt.eur(parseFloat(line.soldPrice) || 0),
+      fmt.eur(soaPerUnit),
+    ];
+  });
+
+  doc.autoTable({
+    startY: infoY + 30,
+    head: [['Product', 'EAN/SKU', 'Max Volume', 'NRRP', 'DIP', 'SOA/Unit']],
+    body: tableData,
+    theme: 'grid',
+    headStyles: { fillColor: [37, 99, 235], fontSize: 9, fontStyle: 'bold' },
+    bodyStyles: { fontSize: 9 },
+    columnStyles: {
+      0: { cellWidth: 55 },
+      2: { halign: 'right' },
+      3: { halign: 'right' },
+      4: { halign: 'right' },
+      5: { halign: 'right' },
+    },
+    margin: { left: 14, right: 14 },
+  });
+
+  let y = doc.lastAutoTable.finalY + 12;
+
+  // General conditions
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(15, 23, 42);
+  doc.text('General Conditions', 14, y);
+  y += 8;
+
+  doc.setFontSize(9);
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(71, 85, 105);
+
+  const conditions = [
+    'A. SOA (Sales on Account) applies only to the products and quantities specified in this notification.',
+    'B. SOA is valid exclusively during the deal period stated above. Quantities sold outside this period are not eligible.',
+    'C. Weekly stock and sales reports must be provided to the assigned agent during the deal period.',
+    'D. All claims must be submitted within 12 weeks of the campaign end date.',
+    'E. Claims must be submitted to the assigned agent and finance@avanca.nl with supporting sell-through data.',
+  ];
+
+  conditions.forEach(c => {
+    const split = doc.splitTextToSize(c, 178);
+    if (y + split.length * 5 > 275) {
+      doc.addPage();
+      y = 20;
+    }
+    doc.text(split, 14, y);
+    y += split.length * 5 + 3;
+  });
+
+  // Claim link
+  y += 5;
+  if (y > 260) { doc.addPage(); y = 20; }
+  doc.setFontSize(10);
+  doc.setFont(undefined, 'bold');
+  doc.setTextColor(37, 99, 235);
+  doc.text('Submit Your Claim Online:', 14, y);
+  y += 6;
+  doc.setFont(undefined, 'normal');
+  doc.setFontSize(9);
+  const claimUrl = getClaimUrl(deal.id);
+  doc.setTextColor(37, 99, 235);
+  doc.textWithLink(claimUrl, 14, y, { url: claimUrl });
+
+  if (deal.claimDeadline || deal.periodEnd) {
+    y += 6;
+    doc.setTextColor(220, 38, 38);
+    doc.setFont(undefined, 'bold');
+    doc.text('Claim Deadline: ' + fmt.date(getClaimDeadline(deal)), 14, y);
+  }
+
+  // Footer
+  const pageCount = doc.getNumberOfPages();
+  for (let p = 1; p <= pageCount; p++) {
+    doc.setPage(p);
+    doc.setFontSize(8);
+    doc.setTextColor(148, 163, 184);
+    doc.text('Powered by Hombli Deal Framework  |  Avanca International B.V.', 14, 290);
+    doc.text('Page ' + p + ' of ' + pageCount, 180, 290);
+  }
+
+  doc.save('Sales-Policy-' + deal.id + '.pdf');
+}
+
+
+/* ═══════════════════════════════════════════════
+   Public Claim Form (no auth required)
+   ═══════════════════════════════════════════════ */
+function ClaimForm({ dealId }) {
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [deal, setDeal] = useState(null);
+  const [lines, setLines] = useState([]);
+  const [actualQtys, setActualQtys] = useState({});
+  const [contactName, setContactName] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    loadClaimData();
+  }, [dealId]);
+
+  async function loadClaimData() {
+    try {
+      const url = CONFIG.APPS_SCRIPT_URL + '?action=getClaimData&dealId=' + encodeURIComponent(dealId);
+      const res = await fetch(url);
+      const data = await res.json();
+      if (data.success) {
+        setDeal(data.deal);
+        setLines(data.lines);
+        const qtys = {};
+        data.lines.forEach(l => { qtys[l.sku] = ''; });
+        setActualQtys(qtys);
+      } else {
+        setError(data.error || 'Failed to load deal data');
+      }
+    } catch (e) {
+      setError('Failed to connect. Please try again later.');
+    }
+    setLoading(false);
+  }
+
+  function updateQty(sku, val) {
+    setActualQtys(prev => ({ ...prev, [sku]: val }));
+  }
+
+  async function handleSubmit(e) {
+    e.preventDefault();
+    setSubmitting(true);
+
+    const claimLines = lines.map(l => ({
+      sku: l.sku,
+      actualQuantity: Math.min(parseInt(actualQtys[l.sku]) || 0, l.quantity),
+    }));
+
+    try {
+      const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({
+          action: 'submitClaim',
+          dealId,
+          claimLines,
+          contactName,
+          contactEmail,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSubmitted(true);
+      } else {
+        setError(data.error || 'Submission failed');
+      }
+    } catch (e) {
+      setError('Failed to submit. Please try again.');
+    }
+    setSubmitting(false);
+  }
+
+  if (loading) {
+    return (
+      <div className="claim-page">
+        <div className="claim-container" style={{ textAlign: 'center' }}>
+          <div className="spinner"></div>
+          <p>Loading claim form...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !deal) {
+    return (
+      <div className="claim-page">
+        <div className="claim-container" style={{ textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 16 }}>&#9888;</div>
+          <h2>Unable to Load Claim</h2>
+          <p style={{ color: 'var(--text-secondary)' }}>{error}</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (submitted) {
+    return (
+      <div className="claim-page">
+        <div className="claim-container claim-success">
+          <div style={{ fontSize: 48, marginBottom: 16, color: 'var(--success)' }}>&#10003;</div>
+          <h2>Claim Submitted Successfully</h2>
+          <p style={{ color: 'var(--text-secondary)', marginBottom: 8 }}>
+            Your claim for deal <strong>{dealId}</strong> has been received.
+          </p>
+          <p style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            Avanca will review your claim and process the settlement. You will be contacted at <strong>{contactEmail}</strong> if any clarification is needed.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const deadline = deal.claimDeadline ? new Date(deal.claimDeadline) : null;
+  const now = new Date();
+  const isExpired = deadline && now > deadline;
+  const daysLeft = deadline ? Math.ceil((deadline - now) / (1000 * 60 * 60 * 24)) : null;
+
+  const canSubmit = !isExpired && (deal.status === 'Completed' || deal.status === 'Live') &&
+    contactName.trim() && contactEmail.trim() &&
+    Object.values(actualQtys).some(v => parseInt(v) > 0);
+
+  return (
+    <div className="claim-page">
+      <div className="claim-container">
+        <div style={{ fontSize: 13, color: 'var(--accent)', fontWeight: 600, letterSpacing: 1, marginBottom: 16 }}>HOMBLI / AVANCA INTERNATIONAL</div>
+        <h1>SOA Claim Submission</h1>
+        <p className="subtitle">Submit your actual quantities sold for deal <strong>{dealId}</strong></p>
+
+        {error && <div style={{ background: 'var(--danger-light)', color: 'var(--danger)', padding: '10px 16px', borderRadius: 8, marginBottom: 16, fontSize: 13 }}>{error}</div>}
+
+        {/* Deadline banner */}
+        {deadline && (
+          <div className={`claim-deadline-banner ${isExpired ? 'expired' : daysLeft <= 14 ? 'warn' : 'ok'}`}>
+            {isExpired
+              ? 'Claim deadline has passed (' + fmt.date(deal.claimDeadline) + '). This claim can no longer be submitted.'
+              : 'Claim must be submitted by ' + fmt.date(deal.claimDeadline) + ' (' + daysLeft + ' days remaining)'}
+          </div>
+        )}
+
+        {/* Deal status check */}
+        {deal.status !== 'Completed' && deal.status !== 'Live' && (
+          <div className="claim-deadline-banner expired">
+            This deal is not eligible for claims (current status: {deal.status}).
+          </div>
+        )}
+
+        {/* Deal info */}
+        <div className="claim-info-grid">
+          <div><div className="label">Retailer</div>{deal.retailer}</div>
+          <div><div className="label">Country</div>{deal.country}</div>
+          <div><div className="label">Agent</div>{deal.agent}</div>
+          <div><div className="label">Deal Period</div>{fmt.date(deal.periodStart)} — {fmt.date(deal.periodEnd)}</div>
+        </div>
+
+        {/* Product lines */}
+        <form onSubmit={handleSubmit}>
+          <h3 style={{ fontSize: 14, marginBottom: 12 }}>Products — Enter Actual Quantities Sold</h3>
+          <div className="table-wrap" style={{ marginBottom: 24 }}>
+            <table>
+              <thead>
+                <tr>
+                  <th>Product</th><th>SKU</th><th>Sold Price</th><th>Planned Qty</th><th>Actual Qty Sold</th>
+                </tr>
+              </thead>
+              <tbody>
+                {lines.map(l => (
+                  <tr key={l.sku}>
+                    <td>{l.productName}</td>
+                    <td style={{ fontFamily: 'monospace', fontSize: 11 }}>{l.sku}</td>
+                    <td>{fmt.eur(l.soldPrice)}</td>
+                    <td>{fmt.num(l.quantity)}</td>
+                    <td>
+                      <input
+                        type="number"
+                        className="claim-qty-input"
+                        min="0"
+                        max={l.quantity}
+                        value={actualQtys[l.sku] || ''}
+                        onChange={e => updateQty(l.sku, e.target.value)}
+                        placeholder="0"
+                        disabled={isExpired}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Contact info */}
+          <h3 style={{ fontSize: 14, marginBottom: 12 }}>Contact Information</h3>
+          <div className="form-row" style={{ marginBottom: 24 }}>
+            <div className="form-group">
+              <label>Your Name</label>
+              <input className="form-input" value={contactName} onChange={e => setContactName(e.target.value)}
+                placeholder="e.g. Jan de Vries" disabled={isExpired} />
+            </div>
+            <div className="form-group">
+              <label>Email Address</label>
+              <input className="form-input" type="email" value={contactEmail} onChange={e => setContactEmail(e.target.value)}
+                placeholder="e.g. jan@retailer.com" disabled={isExpired} />
+            </div>
+          </div>
+
+          <button type="submit" className="btn btn-success" style={{ width: '100%', padding: '14px', fontSize: 15 }}
+            disabled={!canSubmit || submitting}>
+            {submitting ? 'Submitting...' : 'Submit Claim'}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
+/* ── Mount — detect ?claim= URL param ── */
+const claimMatch = window.location.search.match(/[?&]claim=([^&]+)/);
+if (claimMatch) {
+  ReactDOM.createRoot(document.getElementById('root')).render(<ClaimForm dealId={decodeURIComponent(claimMatch[1])} />);
+} else {
+  ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+}
 </script>
 </body>
 </html>
