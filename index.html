@@ -645,50 +645,54 @@ function App() {
         if (parsed.length > 0) setProducts(parsed);
       }
 
-      // Deals
-      if (dealsRes.data && dealsRes.data.length > 0) {
-        const parsed = dealsRes.data.map(r => ({
-          id: r['Deal ID'] || '',
-          agent: r['Agent Name'] || '',
-          country: r['Country/Region'] || '',
-          retailer: r['Retailer'] || '',
-          periodStart: r['Deal Period Start'] || '',
-          periodEnd: r['Deal Period End'] || '',
-          status: r['Status'] || 'Draft',
-          createdDate: r['Created Date'] || '',
-          approvedBy: r['Approved By'] || '',
-          approvalDate: r['Approval Date'] || '',
-          notes: r['Notes'] || '',
-          totalSOA: parseFloat(r['Total SOA (€)']) || 0,
-          totalCommission: parseFloat(r['Total Commission (€)']) || 0,
-          totalRevenue: parseFloat(r['Total Revenue (€)']) || 0,
-          avgMargin: parseFloat(r['Avg Margin %']) || 0,
-        })).filter(d => d.id);
-        if (parsed.length > 0) setDeals(parsed);
-        else setDeals([]);
-      } else {
-        setDeals([]);
-      }
+      // Deals — merge sheet data with localStorage (local fills gaps from CSV cache delay)
+      const localDeals = loadLocal('deals') || [];
+      const localDealLines = loadLocal('dealLines') || {};
 
-      // Deal Lines — group by Deal ID
-      if (linesRes.data && linesRes.data.length > 0) {
-        const grouped = {};
-        linesRes.data.forEach(r => {
-          const dealId = r['Deal ID'] || '';
-          if (!dealId) return;
-          if (!grouped[dealId]) grouped[dealId] = [];
-          grouped[dealId].push({
-            dealId,
-            sku: r['SKU'] || '',
-            productName: r['Product Name'] || '',
-            soldPrice: parseFloat(r['Sold Price (€)']) || 0,
-            quantity: parseInt(r['Quantity']) || 0,
-          });
+      const sheetDeals = (dealsRes.data || []).map(r => ({
+        id: r['Deal ID'] || '',
+        agent: r['Agent Name'] || '',
+        country: r['Country/Region'] || '',
+        retailer: r['Retailer'] || '',
+        periodStart: r['Deal Period Start'] || '',
+        periodEnd: r['Deal Period End'] || '',
+        status: r['Status'] || 'Draft',
+        createdDate: r['Created Date'] || '',
+        approvedBy: r['Approved By'] || '',
+        approvalDate: r['Approval Date'] || '',
+        notes: r['Notes'] || '',
+        totalSOA: parseFloat(r['Total SOA (€)']) || 0,
+        totalCommission: parseFloat(r['Total Commission (€)']) || 0,
+        totalRevenue: parseFloat(r['Total Revenue (€)']) || 0,
+        avgMargin: parseFloat(r['Avg Margin %']) || 0,
+      })).filter(d => d.id);
+
+      // Sheet deal lines
+      const sheetDealLines = {};
+      (linesRes.data || []).forEach(r => {
+        const dealId = r['Deal ID'] || '';
+        if (!dealId) return;
+        if (!sheetDealLines[dealId]) sheetDealLines[dealId] = [];
+        sheetDealLines[dealId].push({
+          dealId,
+          sku: r['SKU'] || '',
+          productName: r['Product Name'] || '',
+          soldPrice: parseFloat(r['Sold Price (€)']) || 0,
+          quantity: parseInt(r['Quantity']) || 0,
         });
-        setDealLines(grouped);
-      } else {
-        setDealLines({});
-      }
+      });
+
+      // Merge: sheet data wins for existing IDs, local adds missing ones
+      const sheetDealIds = new Set(sheetDeals.map(d => d.id));
+      const mergedDeals = [...sheetDeals];
+      localDeals.forEach(d => {
+        if (d.id && !sheetDealIds.has(d.id)) mergedDeals.push(d);
+      });
+
+      const mergedLines = { ...localDealLines, ...sheetDealLines };
+
+      setDeals(mergedDeals);
+      setDealLines(mergedLines);
 
       // Users — merge with demo users
       if (usersRes.data && usersRes.data.length > 0) {
@@ -751,31 +755,57 @@ function App() {
     setPage('dashboard');
   }
 
+  // ── localStorage persistence (bridges CSV cache delay) ──
+  function saveLocal(key, data) {
+    try { localStorage.setItem('df_' + key, JSON.stringify(data)); } catch(e) {}
+  }
+  function loadLocal(key) {
+    try { const d = localStorage.getItem('df_' + key); return d ? JSON.parse(d) : null; } catch(e) { return null; }
+  }
+
+  // Persist deals & lines whenever they change
+  useEffect(() => { if (deals.length > 0 || dataSource === 'sheets') saveLocal('deals', deals); }, [deals]);
+  useEffect(() => { if (Object.keys(dealLines).length > 0 || dataSource === 'sheets') saveLocal('dealLines', dealLines); }, [dealLines]);
+
   function addDeal(deal, lines) {
-    setDeals(prev => [deal, ...prev]);
-    setDealLines(prev => ({ ...prev, [deal.id]: lines }));
+    setDeals(prev => {
+      const next = [deal, ...prev];
+      saveLocal('deals', next);
+      return next;
+    });
+    setDealLines(prev => {
+      const next = { ...prev, [deal.id]: lines };
+      saveLocal('dealLines', next);
+      return next;
+    });
     showToast('Deal created successfully', 'success');
-    // Write to Google Sheets if configured
+    // Write to Google Sheets
     if (CONFIG.APPS_SCRIPT_URL) {
       writeDealToSheet(deal, lines);
     }
   }
 
   function updateDealStatus(dealId, newStatus, reason = '') {
-    setDeals(prev => prev.map(d => {
-      if (d.id !== dealId) return d;
-      return {
-        ...d,
-        status: newStatus,
-        approvedBy: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? user.displayName : d.approvedBy,
-        approvalDate: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? new Date().toISOString().split('T')[0] : d.approvalDate,
-        notes: reason || d.notes,
-      };
-    }));
+    setDeals(prev => {
+      const next = prev.map(d => {
+        if (d.id !== dealId) return d;
+        return {
+          ...d,
+          status: newStatus,
+          approvedBy: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? user.displayName : d.approvedBy,
+          approvalDate: (newStatus === CONFIG.STATUS.APPROVED || newStatus === CONFIG.STATUS.REJECTED) ? new Date().toISOString().split('T')[0] : d.approvalDate,
+          notes: reason || d.notes,
+        };
+      });
+      saveLocal('deals', next);
+      return next;
+    });
     showToast(`Deal ${newStatus.toLowerCase()}`, newStatus === CONFIG.STATUS.REJECTED ? 'error' : 'success');
-    // Write status change to sheet
+    // Write status change to sheet + update deal status
     if (CONFIG.APPS_SCRIPT_URL) {
-      writeAuditLog(dealId, 'status_change', user.displayName, '', newStatus, reason);
+      const deal = deals.find(d => d.id === dealId);
+      writeAuditLog(dealId, 'status_change', user.displayName, deal ? deal.status : '', newStatus, reason);
+      writeDealStatusToSheet(dealId, newStatus, user.displayName, reason);
     }
   }
 
@@ -783,15 +813,30 @@ function App() {
     try {
       await fetch(CONFIG.APPS_SCRIPT_URL, {
         method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'addDeal', deal, lines }),
       });
     } catch(e) { console.error('Sheet write failed:', e); }
+  }
+
+  async function writeDealStatusToSheet(dealId, newStatus, approvedBy, reason) {
+    try {
+      await fetch(CONFIG.APPS_SCRIPT_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
+        body: JSON.stringify({ action: 'updateDealStatus', dealId, newStatus, approvedBy, reason }),
+      });
+    } catch(e) { console.error('Status update write failed:', e); }
   }
 
   async function writeAuditLog(dealId, action, usr, oldStatus, newStatus, notes) {
     try {
       await fetch(CONFIG.APPS_SCRIPT_URL, {
         method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'auditLog', dealId, logAction: action, user: usr, oldStatus, newStatus, notes }),
       });
     } catch(e) { console.error('Audit log write failed:', e); }
