@@ -317,22 +317,22 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
 /* ── Configuration ── */
 const CONFIG = {
-  // Google Sheets published CSV URLs — replace with your actual Sheet ID
-  SHEET_ID: 'YOUR_GOOGLE_SHEET_ID',
-  APPS_SCRIPT_URL: 'YOUR_APPS_SCRIPT_WEB_APP_URL',
+  // Google Sheets published CSV URLs
+  PUB_BASE: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vTb8BxCi32ulunJoODNSLghRqAkQMA57i7xfglnQRtEvLJjB_xqJvUN5peoDolt3gMT4fkBwtu_H6uq/pub',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbyoB5Uk8cwRyiBH7_L7sXDX6oyOPkQG1vBvBXqJeTwZufeMcAevufpNucgIN8P15h4o9g/exec',
 
-  // CSV URLs for each tab (replace SHEET_ID and GID)
+  // CSV URL for a given tab GID
   getSheetUrl(gid) {
-    return `https://docs.google.com/spreadsheets/d/${this.SHEET_ID}/export?format=csv&gid=${gid}`;
+    return `${this.PUB_BASE}?gid=${gid}&single=true&output=csv`;
   },
 
-  // Tab GIDs — update after creating the Google Sheet
-  GID_PRODUCTS: '0',
-  GID_DEALS: '1',
-  GID_DEALLINES: '2',
-  GID_USERS: '3',
-  GID_AUDITLOG: '4',
-  GID_CONFIG: '5',
+  // Tab GIDs
+  GID_PRODUCTS: '2097381963',
+  GID_DEALS: '787009807',
+  GID_DEALLINES: '1860512594',
+  GID_USERS: '1030849883',
+  GID_AUDITLOG: '378152385',
+  GID_CONFIG: '1512401125',
 
   // Commission tiers
   COMMISSION_TIERS: [
@@ -610,35 +610,128 @@ function App() {
 
   // Try loading from Google Sheets
   useEffect(() => {
-    if (CONFIG.SHEET_ID !== 'YOUR_GOOGLE_SHEET_ID') {
+    if (CONFIG.PUB_BASE) {
       loadFromSheets();
     }
   }, []);
 
   async function loadFromSheets() {
     try {
-      const urls = {
-        products: CONFIG.getSheetUrl(CONFIG.GID_PRODUCTS),
-        deals: CONFIG.getSheetUrl(CONFIG.GID_DEALS),
-        dealLines: CONFIG.getSheetUrl(CONFIG.GID_DEALLINES),
-      };
-      // Load products
-      const prodRes = await new Promise((resolve, reject) => {
-        Papa.parse(urls.products, { download: true, header: true, complete: resolve, error: reject });
-      });
+      function fetchCSV(gid) {
+        return new Promise((resolve, reject) => {
+          Papa.parse(CONFIG.getSheetUrl(gid), { download: true, header: true, complete: resolve, error: reject });
+        });
+      }
+
+      // Load all sheets in parallel
+      const [prodRes, dealsRes, linesRes, usersRes, configRes] = await Promise.all([
+        fetchCSV(CONFIG.GID_PRODUCTS),
+        fetchCSV(CONFIG.GID_DEALS),
+        fetchCSV(CONFIG.GID_DEALLINES),
+        fetchCSV(CONFIG.GID_USERS),
+        fetchCSV(CONFIG.GID_CONFIG),
+      ]);
+
+      // Products
       if (prodRes.data && prodRes.data.length > 0) {
-        setProducts(prodRes.data.map(r => ({
-          sku: r['SKU'] || r['sku'],
-          name: r['Product Name'] || r['name'],
+        const parsed = prodRes.data.map(r => ({
+          sku: r['SKU'] || r['sku'] || '',
+          name: r['Product Name'] || r['name'] || '',
           landedCost: parseFloat(r['Landed Cost (€)'] || r['landedCost']) || 0,
           listPrice: parseFloat(r['List Price (€)'] || r['listPrice']) || 0,
           maxSOA: parseFloat(r['Max SOA (€)'] || r['maxSOA']) || 0,
           defaultNetPrice: parseFloat(r['Default Net Price (€)'] || r['defaultNetPrice']) || 0,
-        })).filter(p => p.sku));
-        setDataSource('sheets');
+        })).filter(p => p.sku);
+        if (parsed.length > 0) setProducts(parsed);
       }
+
+      // Deals
+      if (dealsRes.data && dealsRes.data.length > 0) {
+        const parsed = dealsRes.data.map(r => ({
+          id: r['Deal ID'] || '',
+          agent: r['Agent Name'] || '',
+          country: r['Country/Region'] || '',
+          retailer: r['Retailer'] || '',
+          periodStart: r['Deal Period Start'] || '',
+          periodEnd: r['Deal Period End'] || '',
+          status: r['Status'] || 'Draft',
+          createdDate: r['Created Date'] || '',
+          approvedBy: r['Approved By'] || '',
+          approvalDate: r['Approval Date'] || '',
+          notes: r['Notes'] || '',
+          totalSOA: parseFloat(r['Total SOA (€)']) || 0,
+          totalCommission: parseFloat(r['Total Commission (€)']) || 0,
+          totalRevenue: parseFloat(r['Total Revenue (€)']) || 0,
+          avgMargin: parseFloat(r['Avg Margin %']) || 0,
+        })).filter(d => d.id);
+        if (parsed.length > 0) setDeals(parsed);
+        else setDeals([]);
+      } else {
+        setDeals([]);
+      }
+
+      // Deal Lines — group by Deal ID
+      if (linesRes.data && linesRes.data.length > 0) {
+        const grouped = {};
+        linesRes.data.forEach(r => {
+          const dealId = r['Deal ID'] || '';
+          if (!dealId) return;
+          if (!grouped[dealId]) grouped[dealId] = [];
+          grouped[dealId].push({
+            dealId,
+            sku: r['SKU'] || '',
+            productName: r['Product Name'] || '',
+            soldPrice: parseFloat(r['Sold Price (€)']) || 0,
+            quantity: parseInt(r['Quantity']) || 0,
+          });
+        });
+        setDealLines(grouped);
+      } else {
+        setDealLines({});
+      }
+
+      // Users — merge with demo users
+      if (usersRes.data && usersRes.data.length > 0) {
+        const parsed = usersRes.data.map(r => ({
+          username: r['Username'] || '',
+          password: r['Password'] || '',
+          role: r['Role'] || 'agent',
+          displayName: r['Display Name'] || '',
+          country: r['Country/Region'] || '',
+          active: (r['Active'] || '').toLowerCase() === 'yes',
+        })).filter(u => u.username);
+        if (parsed.length > 0) {
+          window._sheetUsers = parsed;
+        }
+      }
+
+      // Config — parse countries and retailers
+      if (configRes.data && configRes.data.length > 0) {
+        const countries = new Set();
+        const retailers = {};
+        configRes.data.forEach(r => {
+          const key = (r['Key'] || '').trim();
+          const val = (r['Value'] || '').trim();
+          if (!key || !val) return;
+          if (key === 'country') {
+            countries.add(val);
+            if (!retailers[val]) retailers[val] = [];
+          }
+          if (key.startsWith('retailer_')) {
+            const country = key.replace('retailer_', '').replace(/_/g, ' ');
+            const countryName = [...countries].find(c => c.toLowerCase() === country) || country;
+            if (!retailers[countryName]) retailers[countryName] = [];
+            retailers[countryName].push(val);
+          }
+        });
+        if (countries.size > 0) {
+          setConfig({ countries: [...countries], retailers });
+        }
+      }
+
+      setDataSource('sheets');
     } catch(e) {
-      console.log('Using demo data (Google Sheets not configured or unavailable)');
+      console.log('Using demo data (Google Sheets not available):', e);
     }
   }
 
@@ -663,7 +756,7 @@ function App() {
     setDealLines(prev => ({ ...prev, [deal.id]: lines }));
     showToast('Deal created successfully', 'success');
     // Write to Google Sheets if configured
-    if (CONFIG.APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+    if (CONFIG.APPS_SCRIPT_URL) {
       writeDealToSheet(deal, lines);
     }
   }
@@ -681,7 +774,7 @@ function App() {
     }));
     showToast(`Deal ${newStatus.toLowerCase()}`, newStatus === CONFIG.STATUS.REJECTED ? 'error' : 'success');
     // Write status change to sheet
-    if (CONFIG.APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_WEB_APP_URL') {
+    if (CONFIG.APPS_SCRIPT_URL) {
       writeAuditLog(dealId, 'status_change', user.displayName, '', newStatus, reason);
     }
   }
@@ -778,7 +871,8 @@ function LoginScreen({ onLogin, users }) {
 
   function handleSubmit(e) {
     e.preventDefault();
-    const u = users.find(u => u.username === username.toLowerCase() && u.password === password && u.active);
+    const allUsers = [...(window._sheetUsers || []), ...users];
+    const u = allUsers.find(u => u.username === username.toLowerCase() && u.password === password && u.active);
     if (u) {
       onLogin({ username: u.username, role: u.role, displayName: u.displayName, country: u.country });
       setError('');
