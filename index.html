@@ -573,8 +573,8 @@ function App() {
   const [user, setUser] = useState(null);
   const [page, setPage] = useState('dashboard');
   const [products, setProducts] = useState(DEMO_PRODUCTS);
-  const [deals, setDeals] = useState(generateDemoDeals());
-  const [dealLines, setDealLines] = useState(generateDemoDealLines());
+  const [deals, setDeals] = useState([]);
+  const [dealLines, setDealLines] = useState({});
   const [config, setConfig] = useState(DEMO_CONFIG);
   const [toast, setToast] = useState(null);
   const [dataSource, setDataSource] = useState('demo'); // 'demo' or 'sheets'
