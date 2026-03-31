@@ -802,7 +802,14 @@ function App() {
   useEffect(() => { if (deals.length > 0 || dataSource === 'sheets') saveLocal('deals', deals); }, [deals]);
   useEffect(() => { if (Object.keys(dealLines).length > 0 || dataSource === 'sheets') saveLocal('dealLines', dealLines); }, [dealLines]);
 
-  function addDeal(deal, lines) {
+  async function addDeal(deal, lines) {
+    if (CONFIG.APPS_SCRIPT_URL) {
+      const result = await writeDealToSheet(deal, lines);
+      if (!result.success) {
+        showToast('Failed to save deal: ' + result.error, 'error');
+        return false;
+      }
+    }
     setDeals(prev => {
       const next = [deal, ...prev];
       saveLocal('deals', next);
@@ -814,13 +821,19 @@ function App() {
       return next;
     });
     showToast('Deal created successfully', 'success');
-    // Write to Google Sheets
-    if (CONFIG.APPS_SCRIPT_URL) {
-      writeDealToSheet(deal, lines);
-    }
+    return true;
   }
 
-  function updateDealStatus(dealId, newStatus, reason = '') {
+  async function updateDealStatus(dealId, newStatus, reason = '') {
+    if (CONFIG.APPS_SCRIPT_URL) {
+      const deal = deals.find(d => d.id === dealId);
+      writeAuditLog(dealId, 'status_change', user.displayName, deal ? deal.status : '', newStatus, reason);
+      const result = await writeDealStatusToSheet(dealId, newStatus, user.displayName, reason);
+      if (!result.success) {
+        showToast('Failed to update status: ' + result.error, 'error');
+        return;
+      }
+    }
     setDeals(prev => {
       const next = prev.map(d => {
         if (d.id !== dealId) return d;
@@ -843,15 +856,16 @@ function App() {
       return next;
     });
     showToast(`Deal ${newStatus.toLowerCase()}`, newStatus === CONFIG.STATUS.REJECTED ? 'error' : 'success');
-    // Write status change to sheet + update deal status
-    if (CONFIG.APPS_SCRIPT_URL) {
-      const deal = deals.find(d => d.id === dealId);
-      writeAuditLog(dealId, 'status_change', user.displayName, deal ? deal.status : '', newStatus, reason);
-      writeDealStatusToSheet(dealId, newStatus, user.displayName, reason);
-    }
   }
 
-  function settleDeal(dealId, notes = '') {
+  async function settleDeal(dealId, notes = '') {
+    if (CONFIG.APPS_SCRIPT_URL) {
+      const result = await writeSettleDeal(dealId, notes);
+      if (!result.success) {
+        showToast('Failed to settle deal: ' + result.error, 'error');
+        return;
+      }
+    }
     setDeals(prev => {
       const next = prev.map(d => {
         if (d.id !== dealId) return d;
@@ -866,56 +880,61 @@ function App() {
       return next;
     });
     showToast('Deal settled', 'success');
-    if (CONFIG.APPS_SCRIPT_URL) {
-      writeSettleDeal(dealId, notes);
-    }
   }
 
   async function writeSettleDeal(dealId, notes) {
     try {
-      await fetch(CONFIG.APPS_SCRIPT_URL, {
+      const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'settleDeal', dealId, notes, user: user.displayName }),
       });
-      setTimeout(refreshFromSheet, 3000);
-    } catch(e) { console.error('Settle write failed:', e); }
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error || 'Settle write failed' };
+      refreshFromSheet();
+      return { success: true };
+    } catch(e) { console.error('Settle write failed:', e); return { success: false, error: e.message }; }
   }
 
   async function writeDealToSheet(deal, lines) {
     try {
-      await fetch(CONFIG.APPS_SCRIPT_URL, {
+      const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'addDeal', deal, lines }),
       });
-      setTimeout(refreshFromSheet, 3000);
-    } catch(e) { console.error('Sheet write failed:', e); }
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error || 'Sheet write failed' };
+      refreshFromSheet();
+      return { success: true };
+    } catch(e) { console.error('Sheet write failed:', e); return { success: false, error: e.message }; }
   }
 
   async function writeDealStatusToSheet(dealId, newStatus, approvedBy, reason) {
     try {
-      await fetch(CONFIG.APPS_SCRIPT_URL, {
+      const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'updateDealStatus', dealId, newStatus, approvedBy, reason }),
       });
-      setTimeout(refreshFromSheet, 3000);
-    } catch(e) { console.error('Status update write failed:', e); }
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error || 'Status update failed' };
+      refreshFromSheet();
+      return { success: true };
+    } catch(e) { console.error('Status update write failed:', e); return { success: false, error: e.message }; }
   }
 
   async function writeAuditLog(dealId, action, usr, oldStatus, newStatus, notes) {
     try {
-      await fetch(CONFIG.APPS_SCRIPT_URL, {
+      const res = await fetch(CONFIG.APPS_SCRIPT_URL, {
         method: 'POST',
-        mode: 'no-cors',
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'auditLog', dealId, logAction: action, user: usr, oldStatus, newStatus, notes }),
       });
-    } catch(e) { console.error('Audit log write failed:', e); }
+      const data = await res.json();
+      if (!data.success) return { success: false, error: data.error || 'Audit log failed' };
+      return { success: true };
+    } catch(e) { console.error('Audit log write failed:', e); return { success: false, error: e.message }; }
   }
 
   const isHQ = user && user.role === 'hq';
@@ -1477,7 +1496,7 @@ function NewDealPage({ products, config, user, onSubmit, onComplete, isHQ }) {
     setLines(prev => prev.filter((_, i) => i !== index));
   }
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const dealId = generateDealId();
     const deal = {
       id: dealId,
@@ -1498,8 +1517,8 @@ function NewDealPage({ products, config, user, onSubmit, onComplete, isHQ }) {
       soldPrice: parseFloat(l.soldPrice) || 0,
       quantity: parseInt(l.quantity) || 0,
     }));
-    onSubmit(deal, dealLinesData);
-    onComplete();
+    const success = await onSubmit(deal, dealLinesData);
+    if (success !== false) onComplete();
   }
 
   const canProceedStep1 = dealInfo.country && dealInfo.retailer && dealInfo.periodStart && dealInfo.periodEnd;
@@ -1892,9 +1911,9 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange, onSett
     onStatusChange(dealId, CONFIG.STATUS.APPROVED);
   }
 
-  function handleReject() {
+  async function handleReject() {
     if (showRejectModal) {
-      onStatusChange(showRejectModal, CONFIG.STATUS.REJECTED, rejectReason);
+      await onStatusChange(showRejectModal, CONFIG.STATUS.REJECTED, rejectReason);
       setShowRejectModal(null);
       setRejectReason('');
     }
@@ -1904,9 +1923,9 @@ function AllDealsPage({ deals, dealLines, user, products, onStatusChange, onSett
     onStatusChange(dealId, newStatus);
   }
 
-  function handleSettle() {
+  async function handleSettle() {
     if (showSettleModal) {
-      onSettle(showSettleModal, settleNotes);
+      await onSettle(showSettleModal, settleNotes);
       setShowSettleModal(null);
       setSettleNotes('');
     }
