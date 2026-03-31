@@ -366,7 +366,7 @@ const { useState, useEffect, useRef, useMemo, useCallback } = React;
 const CONFIG = {
   // Google Sheets published CSV URLs
   PUB_BASE: 'https://docs.google.com/spreadsheets/d/e/2PACX-1vSYTecrReiEd2-dQUoAie9nKkEsIxtYAwtiVWPhrO94fB_gHzVNDOiG8DdhulaUCEstDiM_eZKrIr5z/pub',
-  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycbw30ii1HpNsZAIeep_Aeio4y6CLzANg15ANh5VnY4aP9VqWA8G3_XG-DC8t-ItxWn9G/exec',
+  APPS_SCRIPT_URL: 'https://script.google.com/macros/s/AKfycby_FY2WiQoF7mFXXsw21I0F7YOzFSJfZWVSftCe8YCZynGv-2p3NrpjjgDTiF6rEKT5/exec',
 
   // CSV URL for a given tab GID
   getSheetUrl(gid) {
@@ -966,17 +966,39 @@ function LoginScreen({ onLogin, users }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  function handleSubmit(e) {
+  async function handleSubmit(e) {
     e.preventDefault();
-    const allUsers = [...(window._sheetUsers || []), ...users];
-    const u = allUsers.find(u => u.username === username.toLowerCase() && u.password === password && u.active);
+    setError('');
+    setLoading(true);
+    try {
+      if (CONFIG.APPS_SCRIPT_URL) {
+        // Server-side authentication — passwords never leave the server
+        const res = await fetch(CONFIG.APPS_SCRIPT_URL + '?action=authenticate&username=' +
+          encodeURIComponent(username.toLowerCase()) + '&password=' + encodeURIComponent(password));
+        const data = await res.json();
+        if (data.success) {
+          onLogin(data.user);
+          setLoading(false);
+          return;
+        } else {
+          setError('Invalid username or password');
+          setLoading(false);
+          return;
+        }
+      }
+    } catch(err) {
+      // Apps Script unreachable — fall through to demo users
+    }
+    // Offline/demo fallback — only checks built-in demo users
+    const u = users.find(u => u.username === username.toLowerCase() && u.password === password && u.active);
     if (u) {
       onLogin({ username: u.username, role: u.role, displayName: u.displayName, country: u.country });
-      setError('');
     } else {
       setError('Invalid username or password');
     }
+    setLoading(false);
   }
 
   return (
@@ -988,13 +1010,13 @@ function LoginScreen({ onLogin, users }) {
         <form onSubmit={handleSubmit}>
           <div className="login-field">
             <label>Username</label>
-            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" autoFocus />
+            <input type="text" value={username} onChange={e => setUsername(e.target.value)} placeholder="Enter username" autoFocus disabled={loading} />
           </div>
           <div className="login-field">
             <label>Password</label>
-            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" />
+            <input type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Enter password" disabled={loading} />
           </div>
-          <button type="submit" className="login-btn">Sign In</button>
+          <button type="submit" className="login-btn" disabled={loading}>{loading ? 'Signing in...' : 'Sign In'}</button>
         </form>
         {error && <div className="login-error">{error}</div>}
         <div style={{ marginTop: 24, fontSize: 12, color: '#94a3b8' }}>
