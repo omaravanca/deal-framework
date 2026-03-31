@@ -716,22 +716,16 @@ function App() {
         const data = await res.json();
 
         if (data.success) {
-          // Deals — merge with localStorage (local covers in-flight writes)
-          const localDeals = loadLocal('deals') || [];
+          // Sheet is source of truth — use sheet data directly
           if (data.deals) {
-            const sheetIds = new Set(data.deals.map(d => d.id));
-            const merged = [...data.deals];
-            localDeals.forEach(d => {
-              if (d.id && !sheetIds.has(d.id)) merged.push(d);
-            });
-            setDeals(merged);
+            setDeals(data.deals);
+            saveLocal('deals', data.deals);
           }
 
           // Deal Lines
           if (data.dealLines) {
-            const localLines = loadLocal('dealLines') || {};
-            const merged = { ...localLines, ...data.dealLines };
-            setDealLines(merged);
+            setDealLines(data.dealLines);
+            saveLocal('dealLines', data.dealLines);
           }
 
           // Users
