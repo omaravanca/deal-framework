@@ -683,12 +683,20 @@ function App() {
     }
   }, []);
 
-  // Try loading from Google Sheets
+  // Load from Google Sheets on mount + auto-refresh every 30 seconds
   useEffect(() => {
     if (CONFIG.PUB_BASE) {
       loadFromSheets();
     }
   }, []);
+
+  useEffect(() => {
+    if (!CONFIG.APPS_SCRIPT_URL || !user) return;
+    const interval = setInterval(() => {
+      refreshFromSheet();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [user]);
 
   async function loadFromSheets() {
     try {
@@ -752,6 +760,18 @@ function App() {
       }
       console.log('Sheet load error, using local fallback:', e);
     }
+  }
+
+  // Silent background refresh — updates deals/lines from sheet without full reload
+  async function refreshFromSheet() {
+    try {
+      const res = await fetch(CONFIG.APPS_SCRIPT_URL + '?action=getData');
+      const data = await res.json();
+      if (data.success) {
+        if (data.deals) { setDeals(data.deals); saveLocal('deals', data.deals); }
+        if (data.dealLines) { setDealLines(data.dealLines); saveLocal('dealLines', data.dealLines); }
+      }
+    } catch(e) { /* silent fail — next poll will retry */ }
   }
 
   function showToast(message, type = 'info') {
@@ -859,6 +879,7 @@ function App() {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'settleDeal', dealId, notes, user: user.displayName }),
       });
+      setTimeout(refreshFromSheet, 3000);
     } catch(e) { console.error('Settle write failed:', e); }
   }
 
@@ -870,6 +891,7 @@ function App() {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'addDeal', deal, lines }),
       });
+      setTimeout(refreshFromSheet, 3000);
     } catch(e) { console.error('Sheet write failed:', e); }
   }
 
@@ -881,6 +903,7 @@ function App() {
         headers: { 'Content-Type': 'text/plain' },
         body: JSON.stringify({ action: 'updateDealStatus', dealId, newStatus, approvedBy, reason }),
       });
+      setTimeout(refreshFromSheet, 3000);
     } catch(e) { console.error('Status update write failed:', e); }
   }
 
